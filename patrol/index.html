@@ -1,0 +1,1071 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Patrol — a rhythm stealth puzzle</title>
+<script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+<style>
+  :root {
+    --bg: #0d1016;
+    --panel: #161a24;
+    --panel-2: #1e2330;
+    --line: #2a3040;
+    --text: #e7ebf3;
+    --text-dim: #9aa4b8;
+    --safe: #1c2230;
+    --safe-alt: #202738;
+    --danger-now: #d1364a;
+    --danger-now-glow: #ff5c74;
+    --danger-next: #7a5a20;
+    --danger-next-glow: #ffcf6b;
+    --player: #52e0c4;
+    --exit: #6fd06f;
+    --hz-row: #ff5c74;    /* laser  — high tick */
+    --hz-col: #ffcf6b;    /* plate  — mid clap */
+    --hz-cone: #b58cff;   /* guard  — low thud */
+    --accent: #52e0c4;
+    --danger-text: #ff8a9a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  #app {
+    max-width: 1180px; margin: 0 auto; padding: 18px 20px 60px;
+  }
+  h1 {
+    font-size: 20px; letter-spacing: 0.06em; text-transform: uppercase;
+    margin: 0 0 2px; color: var(--text);
+  }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 16px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px;
+  }
+  .panel + .panel { margin-top: 14px; }
+  .panel h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim); margin: 0 0 10px;
+  }
+
+  /* --- level selector --- */
+  #levelBar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .lvl-btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+  }
+  .lvl-btn:hover { border-color: var(--accent); }
+  .lvl-btn.active { border-color: var(--accent); color: var(--accent); background: #16332e; }
+
+  /* --- grid stage --- */
+  #stage { position: relative; }
+  #gridWrap {
+    display: flex; justify-content: center; align-items: center;
+    background: #05070b; border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px; position: relative; min-height: 260px;
+  }
+  #grid {
+    display: grid; gap: 4px;
+  }
+  .cell {
+    width: 46px; height: 46px; border-radius: 5px; background: var(--safe);
+    position: relative; display: flex; align-items: center; justify-content: center;
+    transition: background-color 90ms ease-out;
+  }
+  .cell.alt { background: var(--safe-alt); }
+  .cell.danger-next { background: var(--danger-next); box-shadow: inset 0 0 0 1px var(--danger-next-glow); }
+  .cell.danger-now { background: var(--danger-now); box-shadow: inset 0 0 0 2px var(--danger-now-glow); }
+  .cell.is-exit::after {
+    content: ""; position: absolute; inset: 6px; border: 2px dashed var(--exit); border-radius: 4px;
+  }
+  .cell .token {
+    width: 62%; height: 62%; border-radius: 50%; background: var(--player);
+    box-shadow: 0 0 10px var(--player); z-index: 2;
+  }
+  .hint-arrow {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 20px; font-weight: 700; pointer-events: none;
+    text-shadow: 0 0 6px #000;
+  }
+
+  #overlay {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(5,7,11,0.82); border-radius: 10px; flex-direction: column; gap: 10px; z-index: 5;
+    text-align: center; padding: 20px;
+  }
+  #overlay.show { display: flex; }
+  #overlay .msg { font-size: 20px; font-weight: 700; }
+  #overlay.win .msg { color: var(--exit); }
+  #overlay.lose .msg { color: var(--danger-text); }
+  #overlay .sub { color: var(--text-dim); font-size: 13px; }
+  #overlay button { margin-top: 6px; }
+
+  /* --- HUD --- */
+  #hud {
+    display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 13px; color: var(--text-dim);
+  }
+  #hud b { color: var(--text); }
+  #hud .warn { color: var(--danger-text); }
+
+  #timeline {
+    display: flex; gap: 2px; margin-top: 10px; overflow-x: auto; padding: 4px 0;
+  }
+  .tick {
+    width: 8px; height: 20px; border-radius: 2px; background: var(--panel-2); flex: 0 0 auto;
+    position: relative;
+  }
+  .tick.now { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .tick .density {
+    position: absolute; bottom: 0; left: 0; right: 0; background: var(--danger-now);
+    border-radius: 2px 2px 0 0;
+  }
+
+  /* --- controls --- */
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  button {
+    font: inherit; cursor: pointer; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  .dpad { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(3, 40px); gap: 4px; margin-top: 10px; }
+  .dpad button { padding: 0; }
+
+  .stat-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; color: var(--text-dim); }
+  .stat-row b { color: var(--text); }
+  .legend { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-dim); }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+  .hazard-badge {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 6px 8px;
+    background: var(--panel-2); border-radius: 6px; margin-bottom: 6px; border-left: 3px solid transparent;
+  }
+  .hazard-badge .pattern { font-family: "SF Mono", Menlo, monospace; letter-spacing: 2px; color: var(--text-dim); }
+  .hazard-badge .pattern b { color: var(--text); }
+
+  label.field { display: block; font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+  input[type="number"], select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 5px; padding: 5px 6px; font-size: 12px; margin-top: 2px;
+  }
+  input[type="range"] { width: 100%; }
+  .sandbox-hazard { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 10px; }
+  .sandbox-hazard .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .sandbox-hazard .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; }
+  .badge-solvable { color: var(--exit); }
+  .badge-unsolvable { color: var(--danger-text); }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Patrol</h1>
+  <p class="subtitle">A beat-stepped stealth puzzle. Cross the room; the hazards fire on Euclidean rhythms. Look, listen, then move.</p>
+
+  <div id="levelBar"></div>
+
+  <div class="layout">
+    <div id="stage">
+      <div id="gridWrap">
+        <div id="grid"></div>
+        <div id="overlay"><div class="msg"></div><div class="sub"></div><div class="btn-row" id="overlayBtns"></div></div>
+      </div>
+      <div id="hud"></div>
+      <div id="timeline"></div>
+      <div class="btn-row">
+        <button id="btnRestart" title="R">Restart (R)</button>
+        <button id="btnHint" title="H">Hint (H)</button>
+        <button id="btnPreview" title="P">▶ Preview next beats (P)</button>
+        <label class="field" style="width:160px; margin-top:0;">Preview tempo (BPM)
+          <input type="range" id="tempoSlider" min="60" max="200" value="110" />
+          <span id="tempoLabel" style="color:var(--text)">110</span>
+        </label>
+      </div>
+      <div class="dpad">
+        <span></span><button data-act="up">▲</button><span></span>
+        <button data-act="left">◀</button><button data-act="wait">●</button><button data-act="right">▶</button>
+        <span></span><button data-act="down">▼</button><span></span>
+      </div>
+    </div>
+
+    <div id="sidebar">
+      <div class="panel">
+        <h2>Hazards</h2>
+        <div id="hazardList"></div>
+      </div>
+      <div class="panel">
+        <h2>Space-time analysis</h2>
+        <div id="statsPanel"></div>
+      </div>
+      <div class="panel" id="sandboxPanel" style="display:none;">
+        <h2>Sandbox — tune the patrol</h2>
+        <div id="sandboxControls"></div>
+      </div>
+      <div class="panel">
+        <h2>Legend</h2>
+        <div class="legend">
+          <div><span class="sw" style="background:var(--danger-now)"></span>Dangerous THIS beat</div>
+          <div><span class="sw" style="background:var(--danger-next)"></span>Dangerous NEXT beat</div>
+          <div><span class="sw" style="background:var(--player)"></span>You</div>
+          <div><span class="sw" style="background:transparent;border:2px dashed var(--exit)"></span>Exit</div>
+          <div>Move: arrows / WASD &nbsp; Wait: space or . &nbsp; Restart: R</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+ * BJÖRKLUND'S ALGORITHM — Euclidean rhythm generation
+ * =========================================================================
+ * E(k, n) distributes k onsets ("hits") as evenly as possible across n
+ * steps and returns a binary array where 1 = onset (dangerous beat) and
+ * 0 = rest (safe beat). The construction (Bjorklund / Toussaint):
+ *
+ *   1. Start with k sequences containing a single onset [1], and (n-k)
+ *      sequences containing a single rest [0].
+ *   2. Repeatedly pair up the front of the "onset" list with the front of
+ *      the "rest" list, concatenating each pair into a single longer
+ *      sequence. Whichever list still has leftover, un-paired sequences
+ *      becomes the new "rest" list for the next round; the freshly paired
+ *      sequences become the new "onset" list.
+ *   3. Stop once the leftover list has 0 or 1 sequences in it (it can no
+ *      longer be evenly distributed against the other list).
+ *   4. The final rhythm is the concatenation of every remaining sequence.
+ *
+ * Design note (why this matters for the game): "maximally even" is not a
+ * cosmetic property — it is what makes a patrol hard to read. A lopsided
+ * pattern like E(2,8) = 10001000 has one big 3-beat gap you can walk
+ * through blind. A maximally even pattern like E(4,8) = 10101010 has no
+ * gap bigger than a single beat anywhere in its cycle — there is no lazy
+ * shortcut, you have to actually track the beat. So: evenness is a proxy
+ * for guard competence. The harder rooms in this game (see Level 4) lean
+ * on patterns that are as close to perfectly even as their (k, n) allows.
+ * ========================================================================= */
+function bjorklund(k, n) {
+  k = Math.max(0, Math.min(k, n));
+  if (n <= 0) return [];
+  if (k === 0) return new Array(n).fill(0);
+  if (k === n) return new Array(n).fill(1);
+
+  let onsets = Array.from({ length: k }, () => [1]);
+  let rests = Array.from({ length: n - k }, () => [0]);
+
+  while (rests.length > 1) {
+    const pairs = Math.min(onsets.length, rests.length);
+    const merged = [];
+    for (let i = 0; i < pairs; i++) merged.push(onsets[i].concat(rests[i]));
+    const leftoverOnsets = onsets.slice(pairs);
+    const leftoverRests = rests.slice(pairs);
+    onsets = merged;
+    // Whichever side still has un-paired sequences carries forward as the
+    // new "remainder" to be distributed in the next round.
+    rests = leftoverOnsets.length > 0 ? leftoverOnsets : leftoverRests;
+  }
+  return onsets.concat(rests).flat();
+}
+
+// Self-test, logged once at startup. E(3,8) and E(5,8) match the canonical
+// Cuban tresillo / cinquillo patterns byte-for-byte. E(2,5) is verified by
+// its EVENNESS (max gap between onsets), since two rotations of the same
+// maximally-even 5-step/2-onset necklace ("10010" and "10100") are both
+// legitimate outputs of a Euclidean construction — they carry the identical
+// gap multiset {2,3} and therefore identical difficulty; only the starting
+// phase differs, and phase is already an explicit, tunable hazard parameter
+// in this game.
+(function selfTestBjorklund() {
+  const fmt = (a) => a.join("");
+  const maxGap = (a) => {
+    const idx = a.reduce((acc, v, i) => (v ? acc.concat(i) : acc), []);
+    let m = 0;
+    for (let i = 0; i < idx.length; i++) {
+      const gap = (idx[(i + 1) % idx.length] - idx[i] + a.length) % a.length || a.length;
+      m = Math.max(m, gap);
+    }
+    return m;
+  };
+  const e38 = bjorklund(3, 8), e58 = bjorklund(5, 8), e25 = bjorklund(2, 5);
+  console.assert(fmt(e38) === "10010010", "E(3,8) mismatch:", fmt(e38));
+  console.assert(fmt(e58) === "10110110", "E(5,8) mismatch:", fmt(e58));
+  console.assert(maxGap(e25) === 3, "E(2,5) not maximally even:", fmt(e25));
+  console.log("[Patrol] bjorklund self-test — E(3,8)=%s E(5,8)=%s E(2,5)=%s (max gap %d)",
+    fmt(e38), fmt(e58), fmt(e25), maxGap(e25));
+})();
+
+/* =========================================================================
+ * NUMBER THEORY HELPERS — gcd / lcm, used to find the full threat-field
+ * repeat period L (see the space-time BFS section below).
+ * ========================================================================= */
+function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
+function lcm(a, b) { return (a / gcd(a, b)) * b; }
+function lcmAll(nums) { return nums.reduce((acc, v) => lcm(acc, v), 1); }
+function mod(a, n) { return ((a % n) + n) % n; }
+
+/* =========================================================================
+ * HAZARDS
+ * A hazard threatens a REGION of the grid and is "live" on beat t whenever
+ * pattern[(t + phase) mod n] === 1. When live, every cell in its region is
+ * deadly for that beat only.
+ * ========================================================================= */
+const HAZARD_KIND = {
+  row:  { label: "Laser row",     color: "var(--hz-row)",  timbre: "laser" },
+  col:  { label: "Pressure plate", color: "var(--hz-col)",  timbre: "plate" },
+  cone: { label: "Guard sightline", color: "var(--hz-cone)", timbre: "guard" },
+};
+
+const DIRS = { N: [-1, 0], S: [1, 0], E: [0, 1], W: [0, -1] };
+
+// Computes the set of {r,c} cells a hazard threatens, given the grid size.
+// Region shapes are static (they don't move) — only their live/rest
+// schedule changes over time.
+function regionCells(spec, rows, cols) {
+  const cells = [];
+  if (spec.type === "row") {
+    for (let c = 0; c < cols; c++) cells.push({ r: spec.row, c });
+  } else if (spec.type === "col") {
+    for (let r = 0; r < rows; r++) cells.push({ r, c: spec.col });
+  } else if (spec.type === "cone") {
+    const [dr, dc] = DIRS[spec.dir];
+    for (let step = 1; step <= spec.length; step++) {
+      const r = spec.origin.r + dr * step;
+      const c = spec.origin.c + dc * step;
+      if (r >= 0 && r < rows && c >= 0 && c < cols) cells.push({ r, c });
+    }
+  }
+  return cells;
+}
+
+function buildHazard(spec, rows, cols) {
+  const pattern = bjorklund(spec.k, spec.n);
+  const cells = regionCells(spec, rows, cols);
+  const cellKeys = new Set(cells.map((p) => p.r + "," + p.c));
+  return { ...spec, pattern, cells, cellKeys, kind: HAZARD_KIND[spec.type] };
+}
+
+function hazardIsLiveAt(hazard, t) {
+  const n = hazard.pattern.length;
+  return hazard.pattern[mod(t + hazard.phase, n)] === 1;
+}
+
+function cellDeadlyAt(hazards, r, c, t) {
+  const key = r + "," + c;
+  for (const h of hazards) {
+    if (h.cellKeys.has(key) && hazardIsLiveAt(h, t)) return h;
+  }
+  return null;
+}
+
+/* =========================================================================
+ * LEVELS
+ * Four hand-authored rooms plus a sandbox template. Budgets are the shortest
+ * safe path length (found by the BFS below) plus a slice of slack — the
+ * prototype's anti-camping mechanic (see runBFS / ANTI-CAMPING notes).
+ * ========================================================================= */
+const LEVELS = [
+  {
+    id: "level1", name: "1 · First Watch",
+    blurb: "One patrol, one rhythm. Learn to read a single Euclidean pattern and duck across its rests.",
+    rows: 5, cols: 7, start: { r: 2, c: 0 }, exit: { r: 2, c: 6 }, budget: 15,
+    hazards: [
+      { id: "h1", type: "row", row: 2, k: 3, n: 8, phase: 0 },
+    ],
+  },
+  {
+    id: "level2", name: "2 · Crossfire",
+    blurb: "Two patrols on coprime cycles (lcm 40 beats) — a long field you must read, not memorize.",
+    rows: 6, cols: 6, start: { r: 5, c: 0 }, exit: { r: 0, c: 5 }, budget: 17,
+    hazards: [
+      { id: "h1", type: "row", row: 2, k: 3, n: 8, phase: 0 },
+      { id: "h2", type: "col", col: 3, k: 2, n: 5, phase: 2 },
+    ],
+  },
+  {
+    id: "level3", name: "3 · Line of Sight",
+    blurb: "A guard's sightline joins the mix. The opening move is forced — the only safe action is to wait.",
+    rows: 6, cols: 7, start: { r: 0, c: 0 }, exit: { r: 5, c: 6 }, budget: 20,
+    hazards: [
+      { id: "h1", type: "row", row: 1, k: 3, n: 8, phase: 7 },
+      { id: "h2", type: "col", col: 1, k: 2, n: 5, phase: 4 },
+      { id: "h3", type: "cone", origin: { r: 3, c: 0 }, dir: "E", length: 4, k: 2, n: 7, phase: 0 },
+    ],
+  },
+  {
+    id: "level4", name: "4 · Competent Patrol",
+    blurb: "Near-maximally-even patterns, four hazards, a long cycle. Many beats offer exactly one safe move.",
+    rows: 6, cols: 8, start: { r: 5, c: 0 }, exit: { r: 0, c: 7 }, budget: 20,
+    hazards: [
+      { id: "h1", type: "row", row: 2, k: 4, n: 8, phase: 0 },
+      { id: "h2", type: "row", row: 4, k: 4, n: 9, phase: 2 },
+      { id: "h3", type: "col", col: 3, k: 3, n: 7, phase: 3 },
+      { id: "h4", type: "col", col: 6, k: 4, n: 9, phase: 1 },
+      { id: "h5", type: "cone", origin: { r: 0, c: 2 }, dir: "S", length: 3, k: 3, n: 8, phase: 4 },
+    ],
+  },
+  {
+    id: "sandbox", name: "Sandbox", isSandbox: true,
+    blurb: "Tune k, n, phase and region for each hazard and play the result immediately.",
+    rows: 7, cols: 7, start: { r: 3, c: 0 }, exit: { r: 3, c: 6 }, budget: 24,
+    hazards: [
+      { id: "h1", type: "row", row: 3, k: 3, n: 8, phase: 0, enabled: true },
+      { id: "h2", type: "col", col: 3, k: 2, n: 5, phase: 0, enabled: false },
+      { id: "h3", type: "cone", origin: { r: 0, c: 6 }, dir: "W", length: 3, k: 2, n: 7, phase: 0, enabled: false },
+    ],
+  },
+];
+
+/* =========================================================================
+ * SPACE-TIME BFS
+ * The whole threat field repeats every L beats, where L = lcm of every
+ * hazard's cycle length n (phase doesn't change a pattern's period, so it
+ * doesn't factor into L). That means the FULL state of the puzzle is fully
+ * described by (cell, beat mod L) — a state space of size rows*cols*L.
+ *
+ * We BFS over that graph: nodes are (cell, t mod L), edges are the 5
+ * actions (4 moves + wait), and an edge is only traversable if the
+ * destination cell is not deadly on the arrival beat (t+1) mod L. Because
+ * BFS explores in order of number-of-actions-taken, the first time it
+ * reaches the exit cell that distance IS the shortest safe path length.
+ *
+ * We keep exploring after finding the exit (rather than stopping) so we
+ * can also compute difficulty stats over the FULL reachable state space:
+ * for every reachable state, how many of its 5 actions are safe. Exactly
+ * one safe action = a tight beat; if that one safe action is "wait", it's
+ * a forced wait.
+ * ========================================================================= */
+const ACTIONS = [
+  { name: "up", dr: -1, dc: 0 },
+  { name: "down", dr: 1, dc: 0 },
+  { name: "left", dr: 0, dc: -1 },
+  { name: "right", dr: 0, dc: 1 },
+  { name: "wait", dr: 0, dc: 0 },
+];
+
+function runBFS(level, hazards) {
+  const { rows, cols, start, exit } = level;
+  const L = hazards.length ? lcmAll(hazards.map((h) => h.pattern.length)) : 1;
+  const numCells = rows * cols;
+  const numStates = numCells * L;
+  const stateOf = (r, c, tmod) => (r * cols + c) * L + tmod;
+
+  const visited = new Uint8Array(numStates);
+  const prevState = new Int32Array(numStates).fill(-1);
+  const prevAction = new Int8Array(numStates).fill(-1);
+
+  const startState = stateOf(start.r, start.c, 0);
+  visited[startState] = 1;
+  const queue = [startState];
+  let head = 0;
+  let goalState = -1;
+
+  while (head < queue.length) {
+    const s = queue[head++];
+    const tmod = s % L;
+    const cellIdx = (s - tmod) / L;
+    const r = Math.floor(cellIdx / cols);
+    const c = cellIdx % cols;
+
+    if (goalState === -1 && r === exit.r && c === exit.c) goalState = s;
+
+    const nextT = (tmod + 1) % L;
+    for (let ai = 0; ai < ACTIONS.length; ai++) {
+      const act = ACTIONS[ai];
+      const nr = r + act.dr, nc = c + act.dc;
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+      if (cellDeadlyAt(hazards, nr, nc, nextT)) continue;
+      const ns = stateOf(nr, nc, nextT);
+      if (!visited[ns]) {
+        visited[ns] = 1;
+        prevState[ns] = s;
+        prevAction[ns] = ai;
+        queue.push(ns);
+      }
+    }
+  }
+
+  if (goalState === -1) return { solvable: false, L };
+
+  const path = [];
+  for (let cur = goalState; cur !== startState; cur = prevState[cur]) {
+    path.push(ACTIONS[prevAction[cur]].name);
+  }
+  path.reverse();
+
+  // Difficulty stats over the full reachable component.
+  let onlyOneSafeCount = 0;
+  let forcedWaitStates = 0;
+  for (let s = 0; s < numStates; s++) {
+    if (!visited[s]) continue;
+    const tmod = s % L;
+    const cellIdx = (s - tmod) / L;
+    const r = Math.floor(cellIdx / cols);
+    const c = cellIdx % cols;
+    const nextT = (tmod + 1) % L;
+    let safe = 0, waitSafe = false;
+    for (const act of ACTIONS) {
+      const nr = r + act.dr, nc = c + act.dc;
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+      if (!cellDeadlyAt(hazards, nr, nc, nextT)) {
+        safe++;
+        if (act.name === "wait") waitSafe = true;
+      }
+    }
+    if (safe === 1) {
+      onlyOneSafeCount++;
+      if (waitSafe) forcedWaitStates++;
+    }
+  }
+
+  return { solvable: true, L, path, pathLength: path.length, onlyOneSafeCount, forcedWaitStates };
+}
+
+// On-demand hint: BFS fresh from the player's *current* state to the exit.
+// Recomputed each time (rather than reusing the initial BFS tree) because
+// the player may have deviated from the optimal route.
+function bfsFrom(level, hazards, fromR, fromC, fromT) {
+  const { rows, cols, exit } = level;
+  const L = hazards.length ? lcmAll(hazards.map((h) => h.pattern.length)) : 1;
+  const stateOf = (r, c, tmod) => (r * cols + c) * L + tmod;
+  const numStates = rows * cols * L;
+  const visited = new Uint8Array(numStates);
+  const prevState = new Int32Array(numStates).fill(-1);
+  const prevAction = new Int8Array(numStates).fill(-1);
+  const startState = stateOf(fromR, fromC, mod(fromT, L));
+  visited[startState] = 1;
+  const queue = [startState];
+  let head = 0, goalState = -1;
+  while (head < queue.length) {
+    const s = queue[head++];
+    const tmod = s % L;
+    const cellIdx = (s - tmod) / L;
+    const r = Math.floor(cellIdx / cols), c = cellIdx % cols;
+    if (r === exit.r && c === exit.c) { goalState = s; break; }
+    const nextT = (tmod + 1) % L;
+    for (let ai = 0; ai < ACTIONS.length; ai++) {
+      const act = ACTIONS[ai];
+      const nr = r + act.dr, nc = c + act.dc;
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+      if (cellDeadlyAt(hazards, nr, nc, nextT)) continue;
+      const ns = stateOf(nr, nc, nextT);
+      if (!visited[ns]) { visited[ns] = 1; prevState[ns] = s; prevAction[ns] = ai; queue.push(ns); }
+    }
+  }
+  if (goalState === -1) return null;
+  // Walk back to find the FIRST action taken from the start state.
+  let cur = goalState;
+  let firstAction = null;
+  while (prevState[cur] !== -1) {
+    if (prevState[cur] === startState) firstAction = ACTIONS[prevAction[cur]].name;
+    cur = prevState[cur];
+  }
+  return firstAction;
+}
+
+/* =========================================================================
+ * ANTI-CAMPING (prototype version)
+ * Real forward pressure would be a slow chaser that closes distance over
+ * time — out of scope here. Instead: a beat budget a little above the
+ * shortest safe path. Exceed it and the level fails, same as a hazard hit.
+ * (A "sentinel" chaser could later be added as another hazard-like actor
+ * with its own isLiveAt()/regionCells() that update from player history,
+ * without touching this budget mechanic.)
+ * ========================================================================= */
+
+/* =========================================================================
+ * AUDIO — Tone.js. Distinct timbre per hazard TYPE; the number of hazards
+ * firing on a beat is the room's DANGER, and that must stay audible: many
+ * hits = loud & dense = few safe cells; global silence = a safe dash.
+ * ========================================================================= */
+const Audio = {
+  ready: false,
+  synths: {},
+  lastTime: {}, // per-timbre last scheduled time, so simultaneous hazards never collide (see playTimbre)
+  async init() {
+    if (this.ready) return;
+    await Tone.start();
+    this.synths.laser = new Tone.Synth({
+      oscillator: { type: "square" },
+      envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.03 },
+      volume: -10,
+    }).toDestination();
+    this.synths.plate = new Tone.NoiseSynth({
+      noise: { type: "pink" },
+      envelope: { attack: 0.001, decay: 0.09, sustain: 0 },
+      volume: -14,
+    });
+    this.plateFilter = new Tone.Filter(1400, "bandpass").toDestination();
+    this.synths.plate.connect(this.plateFilter);
+    this.synths.guard = new Tone.MembraneSynth({
+      pitchDecay: 0.03, octaves: 3,
+      envelope: { attack: 0.001, decay: 0.25, sustain: 0 },
+      volume: -6,
+    }).toDestination();
+    this.ready = true;
+  },
+  // Tone.js synths throw if triggerAttackRelease is called twice at the same
+  // (or an earlier) audio-clock time on the SAME instrument — which happens
+  // whenever two hazards of the same type (e.g. two "row" lasers) fire on
+  // the same beat, since they share one synth per timbre. We guard against
+  // that by nudging each retrigger a hair later than the last one we
+  // scheduled for that timbre, so simultaneous same-type hazards still both
+  // sound (reinforcing "more hits = more danger") instead of throwing.
+  playTimbre(timbre) {
+    if (!this.ready) return;
+    const time = Math.max(Tone.now(), (this.lastTime[timbre] || 0) + 0.005);
+    this.lastTime[timbre] = time;
+    if (timbre === "laser") this.synths.laser.triggerAttackRelease("C6", "32n", time);
+    else if (timbre === "plate") this.synths.plate.triggerAttackRelease("16n", time);
+    else if (timbre === "guard") this.synths.guard.triggerAttackRelease("C2", "8n", time);
+  },
+  playBeat(hazards, t) {
+    // Defensive: audio must never be able to break the game loop that
+    // follows this call (movement, rendering, death/win checks all happen
+    // right after). If Tone.js ever misbehaves, swallow it and keep going.
+    try {
+      for (const h of hazards) if (hazardIsLiveAt(h, t)) this.playTimbre(h.kind.timbre);
+    } catch (err) {
+      console.warn("[Patrol] audio playback error (ignored):", err);
+    }
+  },
+};
+
+/* =========================================================================
+ * GAME STATE + ENGINE
+ * ========================================================================= */
+const state = {
+  level: null,
+  hazards: [],
+  rows: 0, cols: 0,
+  player: { r: 0, c: 0 },
+  beat: 0,
+  dead: false, won: false, frozen: false,
+  analysis: null,
+  failTimer: null,
+  previewTimer: null,
+  previewCancel: false,
+  hintCell: null,
+};
+
+const els = {
+  levelBar: document.getElementById("levelBar"),
+  grid: document.getElementById("grid"),
+  overlay: document.getElementById("overlay"),
+  overlayMsg: document.querySelector("#overlay .msg"),
+  overlaySub: document.querySelector("#overlay .sub"),
+  overlayBtns: document.getElementById("overlayBtns"),
+  hud: document.getElementById("hud"),
+  timeline: document.getElementById("timeline"),
+  hazardList: document.getElementById("hazardList"),
+  statsPanel: document.getElementById("statsPanel"),
+  sandboxPanel: document.getElementById("sandboxPanel"),
+  sandboxControls: document.getElementById("sandboxControls"),
+  tempoSlider: document.getElementById("tempoSlider"),
+  tempoLabel: document.getElementById("tempoLabel"),
+  btnRestart: document.getElementById("btnRestart"),
+  btnHint: document.getElementById("btnHint"),
+  btnPreview: document.getElementById("btnPreview"),
+};
+
+function loadLevel(levelDef) {
+  clearTimers();
+  state.level = levelDef;
+  state.rows = levelDef.rows;
+  state.cols = levelDef.cols;
+  rebuildHazardsAndAnalysis();
+  resetRun(true);
+  buildGridDOM();
+  buildLevelBar();
+  buildHazardList();
+  buildSandboxControls();
+  els.sandboxPanel.style.display = levelDef.isSandbox ? "block" : "none";
+  render();
+}
+
+function activeHazardSpecs() {
+  const specs = state.level.hazards;
+  return state.level.isSandbox ? specs.filter((h) => h.enabled) : specs;
+}
+
+function rebuildHazardsAndAnalysis() {
+  state.hazards = activeHazardSpecs().map((spec) => buildHazard(spec, state.rows, state.cols));
+  state.analysis = runBFS(state.level, state.hazards);
+  renderStats();
+}
+
+function resetRun(instant) {
+  if (state.failTimer) { clearTimeout(state.failTimer); state.failTimer = null; }
+  state.player = { r: state.level.start.r, c: state.level.start.c };
+  state.beat = 0;
+  state.dead = false;
+  state.won = false;
+  state.frozen = false;
+  hideOverlay();
+  render();
+}
+
+function clearTimers() {
+  if (state.failTimer) { clearTimeout(state.failTimer); state.failTimer = null; }
+  cancelPreview();
+}
+
+function currentBudget() {
+  if (!state.level.isSandbox) return state.level.budget;
+  const shortest = state.analysis.solvable ? state.analysis.pathLength : 0;
+  return shortest + 8;
+}
+
+function performAction(actionName) {
+  if (state.frozen || state.dead || state.won) return;
+  const act = ACTIONS.find((a) => a.name === actionName);
+  const nr = state.player.r + act.dr;
+  const nc = state.player.c + act.dc;
+  if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) return; // wall — not a valid action, no beat cost
+
+  Audio.init(); // no-op after first call; requires the gesture that triggered this action
+
+  // Resolution order: move -> beat advances -> evaluate hazards -> die.
+  state.player = { r: nr, c: nc };
+  state.beat += 1;
+
+  const killer = cellDeadlyAt(state.hazards, nr, nc, state.beat);
+  const isExit = nr === state.level.exit.r && nc === state.level.exit.c;
+
+  // Render BEFORE audio: the on-screen state must never depend on Tone.js
+  // succeeding (Audio.playBeat guards its own errors too — see AUDIO).
+  render();
+  Audio.playBeat(state.hazards, state.beat);
+
+  if (killer) {
+    fail(`Spotted by the ${killer.kind.label.toLowerCase()}!`, "It fired right where you stood.");
+    return;
+  }
+  if (state.beat > currentBudget()) {
+    fail("Too slow.", "The rotation caught up with you — budget exceeded.");
+    return;
+  }
+  if (isExit) {
+    win();
+  }
+}
+
+function fail(msg, sub) {
+  state.dead = true;
+  state.frozen = true;
+  showOverlay("lose", msg, sub, [{ label: "Restart now (R)", action: () => resetRun(true) }]);
+  // Failure costs ~2s before auto-reset; manual Restart (button/R) bypasses this.
+  state.failTimer = setTimeout(() => { if (state.dead) resetRun(false); }, 2000);
+}
+
+function win() {
+  state.won = true;
+  state.frozen = true;
+  const idx = LEVELS.indexOf(state.level);
+  const next = LEVELS[idx + 1];
+  const buttons = [{ label: "Replay", action: () => resetRun(true) }];
+  if (next) buttons.push({ label: `Next: ${next.name}`, action: () => loadLevel(next) });
+  showOverlay("win", "Reached the exit.", `Beats used: ${state.beat} / budget ${currentBudget()}`, buttons);
+}
+
+function showOverlay(kind, msg, sub, buttons) {
+  els.overlay.className = "show " + kind;
+  els.overlayMsg.textContent = msg;
+  els.overlaySub.textContent = sub || "";
+  els.overlayBtns.innerHTML = "";
+  for (const b of buttons) {
+    const btn = document.createElement("button");
+    btn.textContent = b.label;
+    btn.className = "primary";
+    btn.onclick = b.action;
+    els.overlayBtns.appendChild(btn);
+  }
+}
+function hideOverlay() { els.overlay.className = ""; }
+
+/* --- hint --- */
+function showHint() {
+  if (state.dead || state.won) return;
+  const action = bfsFrom(state.level, state.hazards, state.player.r, state.player.c, state.beat);
+  state.hintCell = null;
+  if (!action) { flashHud("No safe path from here — restart."); return; }
+  const act = ACTIONS.find((a) => a.name === action);
+  state.hintCell = { r: state.player.r + act.dr, c: state.player.c + act.dc, action };
+  render();
+  setTimeout(() => { state.hintCell = null; render(); }, 1200);
+}
+
+function flashHud(msg) {
+  const div = document.createElement("div");
+  div.className = "warn";
+  div.textContent = msg;
+  els.hud.appendChild(div);
+  setTimeout(() => div.remove(), 1800);
+}
+
+/* --- preview / scrub: plays upcoming beats' sounds without moving --- */
+function cancelPreview() {
+  state.previewCancel = true;
+  if (state.previewTimer) { clearTimeout(state.previewTimer); state.previewTimer = null; }
+}
+async function togglePreview() {
+  if (state.previewTimer) { cancelPreview(); els.btnPreview.textContent = "▶ Preview next beats (P)"; return; }
+  await Audio.init();
+  state.previewCancel = false;
+  els.btnPreview.textContent = "■ Stop preview";
+  const bpm = Number(els.tempoSlider.value);
+  const interval = 60000 / bpm;
+  const beatsAhead = 16;
+  let i = 1;
+  const step = () => {
+    if (state.previewCancel || i > beatsAhead) {
+      els.btnPreview.textContent = "▶ Preview next beats (P)";
+      state.previewTimer = null;
+      highlightTimeline(state.beat);
+      return;
+    }
+    const t = state.beat + i;
+    Audio.playBeat(state.hazards, t);
+    highlightTimeline(t);
+    i++;
+    state.previewTimer = setTimeout(step, interval);
+  };
+  step();
+}
+
+/* =========================================================================
+ * RENDERING
+ * ========================================================================= */
+function buildGridDOM() {
+  els.grid.innerHTML = "";
+  els.grid.style.gridTemplateColumns = `repeat(${state.cols}, 46px)`;
+  els.grid.style.gridTemplateRows = `repeat(${state.rows}, 46px)`;
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const cell = document.createElement("div");
+      cell.className = "cell" + ((r + c) % 2 ? " alt" : "");
+      cell.dataset.r = r; cell.dataset.c = c;
+      if (r === state.level.exit.r && c === state.level.exit.c) cell.classList.add("is-exit");
+      els.grid.appendChild(cell);
+    }
+  }
+}
+
+function render() {
+  const t = state.beat;
+  const cells = els.grid.children;
+  for (const cellEl of cells) {
+    const r = Number(cellEl.dataset.r), c = Number(cellEl.dataset.c);
+    cellEl.classList.remove("danger-now", "danger-next");
+    cellEl.querySelectorAll(".token, .hint-arrow").forEach((n) => n.remove());
+    if (cellDeadlyAt(state.hazards, r, c, t)) cellEl.classList.add("danger-now");
+    else if (cellDeadlyAt(state.hazards, r, c, t + 1)) cellEl.classList.add("danger-next");
+
+    if (r === state.player.r && c === state.player.c) {
+      const tok = document.createElement("div");
+      tok.className = "token";
+      cellEl.appendChild(tok);
+    }
+    if (state.hintCell && r === state.hintCell.r && c === state.hintCell.c) {
+      const arrow = document.createElement("div");
+      arrow.className = "hint-arrow";
+      arrow.textContent = { up: "▲", down: "▼", left: "◀", right: "▶", wait: "●" }[state.hintCell.action];
+      cellEl.appendChild(arrow);
+    }
+  }
+  renderHud();
+  renderTimeline();
+}
+
+function renderHud() {
+  const budget = currentBudget();
+  const firing = state.hazards.filter((h) => hazardIsLiveAt(h, state.beat)).length;
+  els.hud.innerHTML = `
+    <span>Beat <b>${state.beat}</b>${state.analysis.solvable ? ` (mod ${state.analysis.L}: <b>${mod(state.beat, state.analysis.L)}</b>)` : ""}</span>
+    <span>Budget <b>${state.beat}/${budget}</b>${state.beat > budget - 3 && !state.won ? " <span class=\"warn\">(running out)</span>" : ""}</span>
+    <span>Firing now: <b>${firing}/${state.hazards.length}</b></span>
+  `;
+}
+
+function renderTimeline() {
+  if (!state.analysis.solvable) { els.timeline.innerHTML = ""; return; }
+  const L = state.analysis.L;
+  const cur = mod(state.beat, L);
+  if (els.timeline.children.length !== L) {
+    els.timeline.innerHTML = "";
+    for (let i = 0; i < L; i++) {
+      const tick = document.createElement("div");
+      tick.className = "tick";
+      const density = document.createElement("div");
+      density.className = "density";
+      const count = state.hazards.filter((h) => hazardIsLiveAt(h, i)).length;
+      const pct = state.hazards.length ? (count / state.hazards.length) * 100 : 0;
+      density.style.height = pct + "%";
+      tick.appendChild(density);
+      els.timeline.appendChild(tick);
+    }
+  }
+  [...els.timeline.children].forEach((t, i) => t.classList.toggle("now", i === cur));
+}
+function highlightTimeline(t) {
+  if (!state.analysis.solvable) return;
+  const L = state.analysis.L;
+  const cur = mod(t, L);
+  [...els.timeline.children].forEach((el, i) => el.classList.toggle("now", i === cur));
+}
+
+function buildLevelBar() {
+  els.levelBar.innerHTML = "";
+  for (const lvl of LEVELS) {
+    const btn = document.createElement("button");
+    btn.className = "lvl-btn" + (lvl === state.level ? " active" : "");
+    btn.textContent = lvl.name;
+    btn.onclick = () => loadLevel(lvl);
+    els.levelBar.appendChild(btn);
+  }
+}
+
+function buildHazardList() {
+  els.hazardList.innerHTML = `<div style="color:var(--text-dim);font-size:12px;margin-bottom:8px;">${state.level.blurb}</div>`;
+  const specs = state.level.isSandbox ? state.level.hazards.filter((h) => h.enabled) : state.level.hazards;
+  if (!specs.length) {
+    els.hazardList.innerHTML += `<div style="color:var(--text-dim);font-size:12px;">No hazards enabled.</div>`;
+    return;
+  }
+  for (const h of state.hazards) {
+    const badge = document.createElement("div");
+    badge.className = "hazard-badge";
+    badge.style.borderLeftColor = h.kind.color;
+    const regionLabel = h.type === "row" ? `row ${h.row}` : h.type === "col" ? `col ${h.col}` : `${h.dir} from (${h.origin.r},${h.origin.c}) x${h.length}`;
+    badge.innerHTML = `<span>${h.kind.label}<br><span style="color:var(--text-dim)">${regionLabel}</span></span>
+      <span class="pattern">E(${h.k},${h.n})=<b>${h.pattern.join("")}</b> φ${h.phase}</span>`;
+    els.hazardList.appendChild(badge);
+  }
+}
+
+function renderStats() {
+  const a = state.analysis;
+  if (!a.solvable) {
+    els.statsPanel.innerHTML = `<div class="stat-row badge-unsolvable"><b>⚠ Level is UNSOLVABLE with this configuration.</b></div>`;
+    return;
+  }
+  els.statsPanel.innerHTML = `
+    <div class="stat-row"><span>Solvable</span><b class="badge-solvable">yes ✓</b></div>
+    <div class="stat-row"><span>Cycle length (lcm)</span><b>${a.L} beats</b></div>
+    <div class="stat-row"><span>Shortest safe path</span><b>${a.pathLength} beats</b></div>
+    <div class="stat-row"><span>Beat budget</span><b>${currentBudget()}</b></div>
+    <div class="stat-row"><span>"Only one safe move" beats</span><b>${a.onlyOneSafeCount}</b></div>
+    <div class="stat-row"><span>...of which forced waits</span><b>${a.forcedWaitStates}</b></div>
+  `;
+}
+
+/* =========================================================================
+ * SANDBOX CONTROLS
+ * ========================================================================= */
+function buildSandboxControls() {
+  els.sandboxControls.innerHTML = "";
+  if (!state.level.isSandbox) return;
+  state.level.hazards.forEach((spec, i) => {
+    const box = document.createElement("div");
+    box.className = "sandbox-hazard";
+    box.style.borderLeftColor = HAZARD_KIND[spec.type].color;
+    box.style.borderLeftWidth = "3px";
+
+    const regionFields = spec.type === "row"
+      ? `<label class="field">Row<input type="number" data-f="row" min="0" max="${state.rows - 1}" value="${spec.row}"></label>`
+      : spec.type === "col"
+      ? `<label class="field">Column<input type="number" data-f="col" min="0" max="${state.cols - 1}" value="${spec.col}"></label>`
+      : `<div class="grid3">
+           <label class="field">Origin r<input type="number" data-f="originR" min="0" max="${state.rows - 1}" value="${spec.origin.r}"></label>
+           <label class="field">Origin c<input type="number" data-f="originC" min="0" max="${state.cols - 1}" value="${spec.origin.c}"></label>
+           <label class="field">Length<input type="number" data-f="length" min="1" max="8" value="${spec.length}"></label>
+         </div>
+         <label class="field">Direction
+           <select data-f="dir">
+             ${["N", "S", "E", "W"].map((d) => `<option value="${d}" ${d === spec.dir ? "selected" : ""}>${d}</option>`).join("")}
+           </select>
+         </label>`;
+
+    box.innerHTML = `
+      <div class="toggle-row">
+        <label><input type="checkbox" data-f="enabled" ${spec.enabled ? "checked" : ""}/> ${HAZARD_KIND[spec.type].label}</label>
+        <span class="pattern" style="color:${HAZARD_KIND[spec.type].color}">${spec.type}</span>
+      </div>
+      <div class="grid3">
+        <label class="field">k (onsets)<input type="number" data-f="k" min="0" max="16" value="${spec.k}"></label>
+        <label class="field">n (steps)<input type="number" data-f="n" min="1" max="16" value="${spec.n}"></label>
+        <label class="field">phase<input type="number" data-f="phase" min="0" max="15" value="${spec.phase}"></label>
+      </div>
+      ${regionFields}
+    `;
+
+    box.querySelectorAll("input,select").forEach((input) => {
+      input.addEventListener("change", () => {
+        const f = input.dataset.f;
+        let v = input.type === "checkbox" ? input.checked : (input.type === "number" ? Number(input.value) : input.value);
+        if (f === "originR") spec.origin.r = v;
+        else if (f === "originC") spec.origin.c = v;
+        else spec[f] = v;
+        rebuildHazardsAndAnalysis();
+        buildHazardList();
+        resetRun(true);
+      });
+    });
+
+    els.sandboxControls.appendChild(box);
+  });
+}
+
+/* =========================================================================
+ * INPUT
+ * ========================================================================= */
+const KEY_MAP = {
+  ArrowUp: "up", w: "up", W: "up",
+  ArrowDown: "down", s: "down", S: "down",
+  ArrowLeft: "left", a: "left", A: "left",
+  ArrowRight: "right", d: "right", D: "right",
+  " ": "wait", ".": "wait",
+};
+document.addEventListener("keydown", (e) => {
+  if (KEY_MAP[e.key]) { e.preventDefault(); performAction(KEY_MAP[e.key]); }
+  else if (e.key === "r" || e.key === "R") resetRun(true);
+  else if (e.key === "h" || e.key === "H") showHint();
+  else if (e.key === "p" || e.key === "P") togglePreview();
+});
+document.querySelectorAll(".dpad button").forEach((btn) => {
+  btn.addEventListener("click", () => performAction(btn.dataset.act));
+});
+els.btnRestart.addEventListener("click", () => resetRun(true));
+els.btnHint.addEventListener("click", showHint);
+els.btnPreview.addEventListener("click", togglePreview);
+els.tempoSlider.addEventListener("input", () => { els.tempoLabel.textContent = els.tempoSlider.value; });
+
+/* NOTE — real-time mode (explicitly out of scope for this prototype):
+ * the whole engine already separates "advance the beat" (performAction)
+ * from "read input". A metronome-driven auto-advance would just need a
+ * Tone.Transport.scheduleRepeat that calls performAction("wait") on players
+ * who haven't acted, on a fixed interval — nothing here needs restructuring
+ * to add that later. */
+
+/* =========================================================================
+ * BOOTSTRAP
+ * ========================================================================= */
+loadLevel(LEVELS[0]);
+</script>
+</body>
+</html>

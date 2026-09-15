@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rhythm Factory</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  :root{
+    --cream:#faf3e7;
+    --cream-2:#f2e7d5;
+    --paper:#fffaf1;
+    --ink:#4a3b32;
+    --ink-soft:#7a6a5c;
+    --terracotta:#d97a5f;
+    --terracotta-dark:#b95d45;
+    --sage:#8fae8b;
+    --gold:#e0b84f;
+    --line:#e4d5bf;
+    --shadow: 0 4px 14px rgba(120,90,60,0.12);
+    --shadow-lg: 0 10px 30px rgba(120,90,60,0.18);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: radial-gradient(ellipse at top, #fff8ec, var(--cream) 60%);
+    color:var(--ink);
+    min-height:100vh;
+    padding-bottom:60px;
+  }
+  header{
+    text-align:center;
+    padding:28px 20px 10px;
+  }
+  header h1{
+    font-size:2.2rem;
+    margin:0;
+    letter-spacing:0.5px;
+    color:var(--terracotta-dark);
+    text-shadow: 0 2px 0 rgba(255,255,255,0.6);
+  }
+  header p{
+    margin:6px 0 0;
+    color:var(--ink-soft);
+    font-size:0.95rem;
+  }
+
+  .round-bar{
+    display:flex;
+    justify-content:center;
+    gap:10px;
+    flex-wrap:wrap;
+    margin:18px auto;
+    padding:0 20px;
+  }
+  .round-btn{
+    background:var(--paper);
+    border:2px solid var(--line);
+    border-radius:14px;
+    padding:10px 16px;
+    font-size:0.9rem;
+    cursor:pointer;
+    color:var(--ink-soft);
+    transition:all .15s ease;
+    font-weight:600;
+  }
+  .round-btn:hover{ border-color:var(--terracotta); color:var(--terracotta-dark); }
+  .round-btn.active{
+    background:var(--terracotta);
+    border-color:var(--terracotta-dark);
+    color:#fff8ef;
+    box-shadow:var(--shadow);
+  }
+
+  main{
+    max-width:1080px;
+    margin:0 auto;
+    padding:0 20px;
+    display:flex;
+    flex-direction:column;
+    gap:22px;
+  }
+
+  .panel{
+    background:var(--paper);
+    border-radius:20px;
+    padding:20px 22px;
+    box-shadow:var(--shadow);
+    border:1px solid var(--line);
+  }
+  .panel h2{
+    margin:0 0 12px;
+    font-size:1.05rem;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .panel h2 .badge{
+    font-size:0.72rem;
+    background:var(--cream-2);
+    padding:3px 9px;
+    border-radius:20px;
+    color:var(--ink-soft);
+    font-weight:600;
+  }
+
+  /* Targets grid */
+  #targets{
+    display:flex;
+    flex-wrap:wrap;
+    gap:16px;
+    justify-content:flex-start;
+  }
+  .target-card{
+    background:var(--cream-2);
+    border-radius:16px;
+    padding:14px;
+    width:150px;
+    text-align:center;
+    border:2px solid transparent;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .target-card.unlocked{
+    background:linear-gradient(160deg, #fff6df, #ffe9c2);
+    border-color:var(--gold);
+    box-shadow: 0 0 0 3px rgba(224,184,79,0.25), var(--shadow);
+  }
+  .target-card.pulse{ animation:pulse 0.6s ease; }
+  @keyframes pulse{
+    0%{ transform:scale(1);}
+    35%{ transform:scale(1.08);}
+    100%{ transform:scale(1);}
+  }
+  .target-card svg{ display:block; margin:0 auto; }
+  .target-card .kn{
+    margin-top:8px;
+    font-size:1rem;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .target-card .kn .k{ color:var(--terracotta-dark); }
+  .target-card .kn .n{ color:#5a7a6f; }
+  .target-card .status{
+    margin-top:4px;
+    font-size:0.72rem;
+    color:var(--ink-soft);
+    font-weight:600;
+    letter-spacing:0.3px;
+  }
+  .target-card.unlocked .status{ color:#a67f1f; }
+  .target-card .par{
+    font-size:0.68rem;
+    color:var(--ink-soft);
+    margin-top:2px;
+  }
+
+  /* Pool */
+  #pool{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .tile{
+    width:52px;
+    height:52px;
+    border-radius:14px;
+    background:linear-gradient(160deg, #fff, #f4e6cd);
+    border:2px solid var(--gold);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:1.25rem;
+    font-weight:800;
+    color:var(--terracotta-dark);
+    cursor:pointer;
+    box-shadow: 0 3px 0 rgba(200,160,80,0.35), var(--shadow);
+    transition:transform .1s ease;
+    user-select:none;
+  }
+  .tile:hover{ transform:translateY(-2px); }
+  .tile:active{ transform:translateY(1px); }
+  .tile.spent{
+    background:#eee3d1;
+    border-color:#d9cbb0;
+    color:#c3b6a1;
+    cursor:not-allowed;
+    box-shadow:none;
+    transform:none;
+  }
+  .tile.staged{
+    opacity:0.35;
+    cursor:not-allowed;
+    box-shadow:none;
+    transform:none;
+  }
+
+  /* Workbench */
+  .bench-row{
+    display:flex;
+    gap:18px;
+    flex-wrap:wrap;
+  }
+  .builder{
+    flex:1;
+    min-width:260px;
+    background:var(--cream-2);
+    border-radius:16px;
+    padding:14px 16px;
+    border:2px solid transparent;
+    transition:border-color .15s ease;
+  }
+  .builder.focused{
+    border-color:var(--terracotta);
+    box-shadow:0 0 0 3px rgba(217,122,95,0.15);
+  }
+  .builder h3{
+    margin:0 0 8px;
+    font-size:0.85rem;
+    text-transform:uppercase;
+    letter-spacing:0.6px;
+    color:var(--ink-soft);
+    cursor:pointer;
+    user-select:none;
+  }
+  .builder h3::after{
+    content:"tap to focus";
+    float:right;
+    font-size:0.68rem;
+    text-transform:none;
+    letter-spacing:0;
+    opacity:0.6;
+  }
+  .builder.focused h3::after{ content:"● adding tiles here"; color:var(--terracotta-dark); opacity:1; }
+  .builder .value-line{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    min-height:44px;
+  }
+  .chip{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:6px 10px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .chip.op{
+    background:var(--sage);
+    color:#fff;
+    border-color:#7a9a76;
+  }
+  .builder .result{
+    font-size:1.6rem;
+    font-weight:800;
+    color:var(--terracotta-dark);
+    margin-left:auto;
+  }
+  .op-row{
+    display:flex;
+    gap:6px;
+    margin-top:10px;
+  }
+  .op-btn{
+    width:36px;
+    height:36px;
+    border-radius:10px;
+    border:none;
+    background:var(--terracotta);
+    color:#fff;
+    font-size:1.1rem;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .op-btn.active{ outline:3px solid var(--gold); }
+  .op-btn:disabled{ background:#d8c7b7; cursor:not-allowed; }
+  .builder-actions{
+    margin-top:10px;
+    display:flex;
+    gap:8px;
+  }
+  .mini-btn{
+    background:transparent;
+    border:1px solid var(--ink-soft);
+    color:var(--ink-soft);
+    border-radius:10px;
+    padding:5px 10px;
+    font-size:0.78rem;
+    cursor:pointer;
+  }
+  .mini-btn:hover{ background:#fff; }
+
+  .submit-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-top:16px;
+    flex-wrap:wrap;
+  }
+  #submitBtn{
+    background:var(--terracotta-dark);
+    color:#fff8ef;
+    border:none;
+    border-radius:14px;
+    padding:12px 26px;
+    font-size:1rem;
+    font-weight:700;
+    cursor:pointer;
+    box-shadow:var(--shadow);
+  }
+  #submitBtn:hover{ filter:brightness(1.05); }
+  #submitBtn:disabled{ opacity:0.5; cursor:not-allowed; }
+
+  #feedback{
+    font-size:0.9rem;
+    font-weight:600;
+    color:var(--ink-soft);
+    flex:1;
+    min-width:200px;
+  }
+  #feedback.good{ color:#5a8a52; }
+  #feedback.bad{ color:var(--terracotta-dark); }
+
+  /* Controls / score */
+  .controls-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:16px;
+  }
+  .stat-group{
+    display:flex;
+    gap:22px;
+    flex-wrap:wrap;
+  }
+  .stat{
+    text-align:center;
+  }
+  .stat .num{ font-size:1.4rem; font-weight:800; color:var(--terracotta-dark); }
+  .stat .label{ font-size:0.7rem; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.4px; }
+
+  .tempo-wrap{ display:flex; align-items:center; gap:10px; }
+  .tempo-wrap input[type=range]{ width:140px; }
+
+  .action-btn{
+    background:var(--sage);
+    color:#fff;
+    border:none;
+    border-radius:12px;
+    padding:9px 16px;
+    font-weight:700;
+    cursor:pointer;
+    font-size:0.85rem;
+  }
+  .action-btn.alt{ background:var(--terracotta); }
+  .action-btn:disabled{ background:#cfd8cd; cursor:not-allowed; }
+
+  footer{
+    text-align:center;
+    color:var(--ink-soft);
+    font-size:0.78rem;
+    margin-top:30px;
+  }
+
+  .round-clear-banner{
+    text-align:center;
+    background:linear-gradient(160deg,#fff6df,#ffe4a8);
+    border:2px solid var(--gold);
+    border-radius:16px;
+    padding:14px;
+    font-weight:800;
+    color:#8a6a1f;
+    display:none;
+  }
+  .round-clear-banner.show{ display:block; animation:pulse .6s ease; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🥁 Rhythm Factory</h1>
+  <p>Build the numbers, unlock the groove. Every rhythm needs a <b>k</b> (onsets) and an <b>n</b> (cycle length) — and they must be coprime.</p>
+</header>
+
+<div class="round-bar" id="roundBar"></div>
+
+<main>
+
+  <div class="panel">
+    <h2>Targets <span class="badge" id="targetProgress">0 / 0</span></h2>
+    <div id="targets"></div>
+    <div class="round-clear-banner" id="clearBanner">🎉 Round cleared! Every groove is playing.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Tile Pool <span class="badge" id="poolCount">0 tiles left</span></h2>
+    <div id="pool"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Workbench</h2>
+    <div class="bench-row">
+      <div class="builder" id="kBuilderPanel">
+        <h3>k &nbsp;·&nbsp; onsets</h3>
+        <div class="value-line" id="kChips"></div>
+        <div class="op-row" id="kOps"></div>
+        <div class="builder-actions">
+          <button class="mini-btn" data-builder="k" data-act="undo">Undo tile</button>
+          <button class="mini-btn" data-builder="k" data-act="clear">Clear</button>
+        </div>
+      </div>
+      <div class="builder" id="nBuilderPanel">
+        <h3>n &nbsp;·&nbsp; cycle length</h3>
+        <div class="value-line" id="nChips"></div>
+        <div class="op-row" id="nOps"></div>
+        <div class="builder-actions">
+          <button class="mini-btn" data-builder="n" data-act="undo">Undo tile</button>
+          <button class="mini-btn" data-builder="n" data-act="clear">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="submit-row">
+      <button id="submitBtn">Submit rhythm</button>
+      <div id="feedback">Pick tiles for k and n, then submit.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="controls-row">
+      <div class="stat-group">
+        <div class="stat"><div class="num" id="scoreStat">0</div><div class="label">Score</div></div>
+        <div class="stat"><div class="num" id="unlockedStat">0/0</div><div class="label">Unlocked</div></div>
+        <div class="stat"><div class="num" id="tilesLeftStat">0</div><div class="label">Tiles left</div></div>
+      </div>
+      <div class="tempo-wrap">
+        <label for="tempo">Tempo</label>
+        <input type="range" id="tempo" min="60" max="180" value="110">
+        <span id="tempoVal">110 BPM</span>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="action-btn" id="playAllBtn">▶ Play all unlocked</button>
+        <button class="action-btn alt" id="stopBtn">■ Stop</button>
+        <button class="action-btn" id="endRoundBtn">End round</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>Rhythm Factory — a cozy number-theory rhythm puzzle. Necklaces built with the Björklund (Euclidean) algorithm.</footer>
+
+<script>
+/* =========================================================================
+   MATH: gcd + Björklund (Euclidean rhythm) generation
+   ========================================================================= */
+
+// Standard integer gcd (Euclidean algorithm) — the actual number-theory
+// gate for the whole game: a rhythm E(k,n) is a single "real" groove only
+// when gcd(k,n) === 1. If gcd > 1, the pattern is just `gcd` back-to-back
+// copies of the smaller groove E(k/gcd, n/gcd) — a degenerate repeat, not
+// a fresh rhythm.
+function gcd(a, b) {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b) { [a, b] = [b, a % b]; }
+  return a;
+}
+
+// Björklund's algorithm: distributes k onsets ("1") as evenly as possible
+// across n steps ("0" elsewhere), which is exactly what the Euclidean
+// algorithm does when you repeatedly divide remainders into groups.
+//
+// Method: start with k single-element groups of [1] and (n-k) single
+// element groups of [0]. Repeatedly pair up the two lists element-wise,
+// concatenating a [1]-group with a [0]-group; whichever list has leftover
+// (unpaired) groups becomes the new "remainder" list for the next round.
+// Stop once the remainder list has at most one group left, then flatten
+// everything back into a single sequence. Because every surviving group
+// still begins with the original [1] group, the very first element of the
+// final sequence is always an onset — so the pattern is already rotated
+// with the first onset locked to step 0, as required.
+//
+// Verified against the canonical examples:
+//   euclideanRhythm(3, 8) -> [1,0,0,1,0,0,1,0]  (the "tresillo")
+//   euclideanRhythm(5, 8) -> [1,0,1,1,0,1,1,0]  (Bulgarian 5-in-8)
+//   euclideanRhythm(2, 5) -> [1,0,1,0,0]         (2-in-5, first onset at step 0)
+function euclideanRhythm(k, n) {
+  if (n <= 0) return [];
+  if (k <= 0) return new Array(n).fill(0);
+  if (k >= n) return new Array(n).fill(1);
+
+  let groups = [];
+  let remainder = [];
+  for (let i = 0; i < k; i++) groups.push([1]);
+  for (let i = 0; i < n - k; i++) remainder.push([0]);
+
+  while (remainder.length > 1) {
+    const pairCount = Math.min(groups.length, remainder.length);
+    const merged = [];
+    for (let i = 0; i < pairCount; i++) {
+      merged.push(groups[i].concat(remainder[i]));
+    }
+    const leftover = groups.length > pairCount
+      ? groups.slice(pairCount)
+      : remainder.slice(pairCount);
+    groups = merged;
+    remainder = leftover;
+  }
+
+  return groups.concat(remainder).flat();
+}
+
+/* =========================================================================
+   ROUND DATA (hand-authored)
+   ========================================================================= */
+
+function target(k, n) { return { k, n, unlocked: false }; }
+
+const ROUNDS = [
+  {
+    name: "1 · First Grooves",
+    blurb: "A generous pool. Most numbers are sitting right there — just pick them up.",
+    pool: [2, 3, 3, 4, 5, 8, 2, 6],
+    targets: [ target(2, 5), target(3, 8), target(3, 4) ],
+  },
+  {
+    name: "2 · Tight Trade-offs",
+    blurb: "Fewer tiles, more thinking. One naive move looks perfect but isn't coprime — and every tile you spend is a tile another target can't have.",
+    pool: [2, 2, 3, 5, 6, 7, 8, 9],
+    targets: [ target(3, 8), target(4, 9), target(2, 7) ],
+  },
+  {
+    name: "3 · Full Circle",
+    blurb: "Zero slack. Every tile is spoken for in the full solution — clearing this round means sharing perfectly.",
+    pool: [2, 3, 3, 4, 4, 4, 5, 5, 7, 8, 9],
+    targets: [ target(2, 5), target(3, 7), target(5, 8), target(3, 8), target(4, 9) ],
+  },
+  {
+    name: "Sandbox",
+    blurb: "Big practice pool — experiment freely with building k and n.",
+    pool: [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9],
+    targets: [ target(2, 5), target(3, 8), target(5, 8), target(3, 7), target(4, 9), target(2, 9) ],
+  },
+];
+
+/* =========================================================================
+   GAME STATE
+   ========================================================================= */
+
+let state = null; // set by loadRound()
+let tileUid = 0;
+
+function makeBuilder() {
+  // steps: array of {tileId, value, op} — op is the operator applied
+  // BEFORE this tile (null for the first tile in the sequence).
+  return { steps: [], value: null };
+}
+
+function loadRound(index) {
+  const round = ROUNDS[index];
+  state = {
+    roundIndex: index,
+    pool: round.pool.map(v => ({ id: ++tileUid, value: v, spent: false })),
+    targets: round.targets.map(t => ({ ...t, unlocked: false })),
+    kBuilder: makeBuilder(),
+    nBuilder: makeBuilder(),
+    kOp: null,
+    nOp: null,
+    activeBuilder: 'k',
+    score: 0,
+    playingParts: [], // active Tone.Sequence instances for unlocked grooves
+  };
+  Tone.Transport.stop();
+  Tone.Transport.cancel();
+  state.playingParts.forEach(p => p.dispose());
+  state.playingParts = [];
+  document.getElementById('clearBanner').classList.remove('show');
+  setFeedback("Pick tiles for k and n, then submit.", null);
+  renderAll();
+}
+
+/* =========================================================================
+   TILE CONSUMPTION / EXPRESSION BUILDING
+   ========================================================================= */
+
+const OPS = {
+  '+': (a, b) => a + b,
+  '-': (a, b) => a - b,
+  '*': (a, b) => a * b,
+  '/': (a, b) => (b !== 0 && a % b === 0) ? a / b : null,
+};
+
+function builderFor(which) { return which === 'k' ? state.kBuilder : state.nBuilder; }
+
+// A tile is "in use" if it's already spent (consumed by a past unlock) or
+// currently staged in either the k or n builder for the attempt in progress.
+function tileAvailable(tile) {
+  if (tile.spent) return false;
+  const inK = state.kBuilder.steps.some(s => s.tileId === tile.id);
+  const inN = state.nBuilder.steps.some(s => s.tileId === tile.id);
+  return !inK && !inN;
+}
+
+function pickTile(which, tileId) {
+  const tile = state.pool.find(t => t.id === tileId);
+  if (!tile || !tileAvailable(tile)) return;
+  const builder = builderFor(which);
+  const opKey = which === 'k' ? 'kOp' : 'nOp';
+
+  if (builder.steps.length >= 3) {
+    setFeedback("At most 3 tiles per number — that's plenty.", 'bad');
+    return;
+  }
+
+  if (builder.value === null) {
+    // First tile in this expression: just take its value.
+    builder.steps.push({ tileId: tile.id, value: tile.value, op: null });
+    builder.value = tile.value;
+  } else {
+    const op = state[opKey];
+    if (!op) {
+      setFeedback(`Choose an operator before adding another tile to ${which}.`, 'bad');
+      return;
+    }
+    const result = OPS[op](builder.value, tile.value);
+    if (result === null || !Number.isInteger(result) || result < 0) {
+      setFeedback(`${builder.value} ${op} ${tile.value} doesn't divide evenly — try a different tile.`, 'bad');
+      return;
+    }
+    builder.steps.push({ tileId: tile.id, value: tile.value, op });
+    builder.value = result;
+    state[opKey] = null;
+  }
+  renderAll();
+}
+
+function setOp(which, op) {
+  const builder = builderFor(which);
+  if (builder.value === null) {
+    setFeedback("Add a tile first, then pick an operator.", 'bad');
+    return;
+  }
+  const opKey = which === 'k' ? 'kOp' : 'nOp';
+  state[opKey] = (state[opKey] === op) ? null : op;
+  renderAll();
+}
+
+function undoTile(which) {
+  const builder = builderFor(which);
+  if (builder.steps.length === 0) return;
+  builder.steps.pop();
+  // Recompute value from scratch by replaying the remaining steps.
+  builder.value = builder.steps.length ? builder.steps[0].value : null;
+  for (let i = 1; i < builder.steps.length; i++) {
+    builder.value = OPS[builder.steps[i].op](builder.value, builder.steps[i].value);
+  }
+  const opKey = which === 'k' ? 'kOp' : 'nOp';
+  state[opKey] = null;
+  renderAll();
+}
+
+function clearBuilder(which) {
+  const builder = builderFor(which);
+  builder.steps = [];
+  builder.value = null;
+  const opKey = which === 'k' ? 'kOp' : 'nOp';
+  state[opKey] = null;
+  renderAll();
+}
+
+function submit() {
+  const kB = state.kBuilder, nB = state.nBuilder;
+  if (kB.value === null || nB.value === null) {
+    setFeedback("Build both k and n before submitting.", 'bad');
+    return;
+  }
+  const kVal = kB.value, nVal = nB.value;
+
+  if (kVal < 1 || nVal < 2 || kVal >= nVal) {
+    setFeedback(`k=${kVal}, n=${nVal} isn't even a valid rhythm shape (need 1 ≤ k < n).`, 'bad');
+    clearBuilder('k'); clearBuilder('n');
+    return;
+  }
+
+  // The coprime gate: this is the number-theory teaching moment. A rhythm
+  // is only "real" (aperiodic, evenly-spread) when gcd(k,n) === 1.
+  const g = gcd(kVal, nVal);
+  if (g !== 1) {
+    setFeedback(`gcd(${kVal}, ${nVal}) = ${g} — that's ${g} copies of E(${kVal/g}, ${nVal/g}) stitched together, not a real groove. Try different tiles.`, 'bad');
+    clearBuilder('k'); clearBuilder('n');
+    return;
+  }
+
+  const match = state.targets.find(t => !t.unlocked && t.k === kVal && t.n === nVal);
+  if (!match) {
+    const alreadyDone = state.targets.find(t => t.unlocked && t.k === kVal && t.n === nVal);
+    if (alreadyDone) {
+      setFeedback(`k=${kVal}, n=${nVal} is coprime — nice! But that rhythm's already unlocked.`, 'bad');
+    } else {
+      setFeedback(`k=${kVal}, n=${nVal} is a real coprime rhythm — just not one any target here needs.`, 'bad');
+    }
+    clearBuilder('k'); clearBuilder('n');
+    return;
+  }
+
+  // Success: permanently spend every tile used in both expressions.
+  const tilesUsed = kB.steps.length + nB.steps.length;
+  const opsUsed = kB.steps.filter(s => s.op).length + nB.steps.filter(s => s.op).length;
+  [...kB.steps, ...nB.steps].forEach(step => {
+    const tile = state.pool.find(t => t.id === step.tileId);
+    if (tile) tile.spent = true;
+  });
+
+  match.unlocked = true;
+  match.tilesUsed = tilesUsed;
+  match.opsUsed = opsUsed;
+
+  const parPenalty = Math.max(0, tilesUsed - 2) * 15 + opsUsed * 5;
+  const points = Math.max(20, 100 - parPenalty);
+  state.score += points;
+
+  clearBuilder('k'); clearBuilder('n');
+  setFeedback(`✓ Unlocked E(${match.k}, ${match.n}) — +${points} points!`, 'good');
+  playGroove(match);
+  renderAll();
+  flashTarget(match);
+  maybeRoundClear();
+}
+
+function maybeRoundClear() {
+  if (state.targets.every(t => t.unlocked)) {
+    const remaining = state.pool.filter(t => !t.spent).length;
+    state.score += remaining * 5;
+    document.getElementById('clearBanner').classList.add('show');
+    renderAll();
+    playAllUnlocked();
+  }
+}
+
+/* =========================================================================
+   AUDIO (Tone.js)
+   ========================================================================= */
+
+let downbeatSynth = null;
+let onsetSynth = null;
+const PENTATONIC = ['C4','D4','E4','G4','A4','C5','D5']; // cozy, warm scale to pitch each layer
+
+function ensureAudio() {
+  if (downbeatSynth) return;
+  downbeatSynth = new Tone.MembraneSynth({
+    pitchDecay: 0.02, octaves: 4,
+    envelope: { attack: 0.001, decay: 0.35, sustain: 0.01, release: 0.4 }
+  }).toDestination();
+  downbeatSynth.volume.value = -4;
+
+  onsetSynth = new Tone.PluckSynth({
+    attackNoise: 0.6, dampening: 3200, resonance: 0.85
+  }).toDestination();
+  onsetSynth.volume.value = -6;
+}
+
+// Builds a looping Tone.Sequence for one target's Euclidean groove.
+// Step 0 (the locked downbeat) gets the deep membrane hit; other onsets
+// get a warm plucked note from a pentatonic scale (pitch chosen per-target
+// so several layered grooves are easy to tell apart by ear).
+function buildGrooveSequence(target, noteIndex) {
+  const pattern = euclideanRhythm(target.k, target.n);
+  const note = PENTATONIC[noteIndex % PENTATONIC.length];
+  // 0 = rest, 1 = accented downbeat (step 0), 2 = regular onset.
+  const stepTypes = pattern.map((v, i) => v === 0 ? 0 : (i === 0 ? 1 : 2));
+  return new Tone.Sequence((time, val) => {
+    if (val === 1) downbeatSynth.triggerAttackRelease('C2', '16n', time, 1.0);
+    else if (val === 2) onsetSynth.triggerAttackRelease(note, '16n', time, 0.7);
+  }, stepTypes, '16n').start(0);
+}
+
+async function playGroove(target) {
+  ensureAudio();
+  await Tone.start();
+  Tone.Transport.bpm.value = Number(document.getElementById('tempo').value);
+  const idx = state.targets.indexOf(target);
+  const seq = buildGrooveSequence(target, idx);
+  state.playingParts.push(seq);
+  if (Tone.Transport.state !== 'started') Tone.Transport.start();
+}
+
+async function playAllUnlocked() {
+  ensureAudio();
+  await Tone.start();
+  stopAll();
+  Tone.Transport.bpm.value = Number(document.getElementById('tempo').value);
+  state.targets.forEach((t, idx) => {
+    if (!t.unlocked) return;
+    const seq = buildGrooveSequence(t, idx);
+    state.playingParts.push(seq);
+  });
+  Tone.Transport.start();
+}
+
+function stopAll() {
+  Tone.Transport.stop();
+  Tone.Transport.cancel();
+  state.playingParts.forEach(p => p.dispose());
+  state.playingParts = [];
+}
+
+/* =========================================================================
+   RENDERING
+   ========================================================================= */
+
+function setFeedback(msg, kind) {
+  const el = document.getElementById('feedback');
+  el.textContent = msg;
+  el.className = kind ? kind : '';
+}
+
+function necklaceSVG(k, n, opts = {}) {
+  const size = 96, r = 36, cx = size/2, cy = size/2, dotR = opts.dotR || 7;
+  const pattern = euclideanRhythm(k, n);
+  let dots = '';
+  for (let i = 0; i < n; i++) {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + r * Math.cos(angle);
+    const y = cy + r * Math.sin(angle);
+    const filled = pattern[i] === 1;
+    const isZero = i === 0;
+    const fill = filled ? (opts.fillColor || '#d97a5f') : '#fff';
+    const stroke = isZero ? (opts.zeroColor || '#8fae8b') : '#c9b79a';
+    const sw = isZero ? 3 : 1.5;
+    dots += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${dotR}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e4d5bf" stroke-width="1.5" stroke-dasharray="2 4"/>
+    ${dots}
+  </svg>`;
+}
+
+function flashTarget(target) {
+  const idx = state.targets.indexOf(target);
+  const card = document.querySelector(`.target-card[data-idx="${idx}"]`);
+  if (card) {
+    card.classList.add('pulse');
+    setTimeout(() => card.classList.remove('pulse'), 650);
+  }
+}
+
+function renderRoundBar() {
+  const bar = document.getElementById('roundBar');
+  bar.innerHTML = ROUNDS.map((r, i) =>
+    `<button class="round-btn ${i === state.roundIndex ? 'active' : ''}" data-round="${i}">${r.name}</button>`
+  ).join('');
+}
+
+function renderTargets() {
+  const round = ROUNDS[state.roundIndex];
+  const wrap = document.getElementById('targets');
+  wrap.innerHTML = state.targets.map((t, i) => {
+    const svg = necklaceSVG(t.k, t.n, t.unlocked ? { fillColor: '#e0b84f' } : {});
+    const parLine = t.unlocked
+      ? `<div class="par">${t.tilesUsed} tiles · ${t.opsUsed} ops</div>`
+      : `<div class="par">&nbsp;</div>`;
+    return `<div class="target-card ${t.unlocked ? 'unlocked' : ''}" data-idx="${i}">
+      ${svg}
+      <div class="kn"><span class="k">k=${t.k}</span> · <span class="n">n=${t.n}</span></div>
+      <div class="status">${t.unlocked ? 'UNLOCKED' : 'locked'}</div>
+      ${parLine}
+    </div>`;
+  }).join('');
+  document.getElementById('targetProgress').textContent =
+    `${state.targets.filter(t => t.unlocked).length} / ${state.targets.length}`;
+
+  const blurbHost = document.querySelector('.panel h2 .badge').closest('.panel');
+}
+
+function renderPool() {
+  const wrap = document.getElementById('pool');
+  wrap.innerHTML = state.pool.map(tile => {
+    const staged = !tile.spent && !tileAvailable(tile);
+    let cls = 'tile';
+    if (tile.spent) cls += ' spent';
+    else if (staged) cls += ' staged';
+    return `<div class="${cls}" data-tile="${tile.id}">${tile.value}</div>`;
+  }).join('');
+  const left = state.pool.filter(t => !t.spent).length;
+  document.getElementById('poolCount').textContent = `${left} tiles left`;
+  document.getElementById('tilesLeftStat').textContent = left;
+}
+
+function renderBuilder(which) {
+  const builder = builderFor(which);
+  const chipsEl = document.getElementById(which + 'Chips');
+  const opsEl = document.getElementById(which + 'Ops');
+  const opKey = which === 'k' ? 'kOp' : 'nOp';
+
+  let html = '';
+  builder.steps.forEach(step => {
+    if (step.op) html += `<span class="chip op">${step.op}</span>`;
+    html += `<span class="chip">${step.value}</span>`;
+  });
+  const resultVal = builder.value === null ? '—' : builder.value;
+  html += `<span class="result">${resultVal}</span>`;
+  chipsEl.innerHTML = html;
+
+  const activeOp = state[opKey];
+  opsEl.innerHTML = ['+','-','*','/'].map(op =>
+    `<button class="op-btn ${activeOp === op ? 'active' : ''}" data-builder="${which}" data-op="${op}" ${builder.value === null ? 'disabled' : ''}>${op}</button>`
+  ).join('');
+}
+
+function renderScore() {
+  document.getElementById('scoreStat').textContent = state.score;
+  document.getElementById('unlockedStat').textContent =
+    `${state.targets.filter(t => t.unlocked).length}/${state.targets.length}`;
+}
+
+function renderFocus() {
+  document.getElementById('kBuilderPanel').classList.toggle('focused', state.activeBuilder === 'k');
+  document.getElementById('nBuilderPanel').classList.toggle('focused', state.activeBuilder === 'n');
+}
+
+function renderAll() {
+  renderRoundBar();
+  renderTargets();
+  renderPool();
+  renderBuilder('k');
+  renderBuilder('n');
+  renderScore();
+  renderFocus();
+}
+
+/* =========================================================================
+   EVENTS
+   ========================================================================= */
+
+document.getElementById('roundBar').addEventListener('click', e => {
+  const btn = e.target.closest('.round-btn');
+  if (!btn) return;
+  stopAllSafe();
+  loadRound(Number(btn.dataset.round));
+});
+
+document.getElementById('pool').addEventListener('click', e => {
+  const tileEl = e.target.closest('.tile');
+  if (!tileEl) return;
+  pickTile(state.activeBuilder, Number(tileEl.dataset.tile));
+});
+
+document.getElementById('kBuilderPanel').addEventListener('click', e => {
+  if (e.target.closest('h3')) { state.activeBuilder = 'k'; renderFocus(); return; }
+  const opBtn = e.target.closest('.op-btn');
+  if (opBtn) { setOp('k', opBtn.dataset.op); return; }
+  const mini = e.target.closest('.mini-btn');
+  if (mini) { mini.dataset.act === 'undo' ? undoTile('k') : clearBuilder('k'); }
+});
+document.getElementById('nBuilderPanel').addEventListener('click', e => {
+  if (e.target.closest('h3')) { state.activeBuilder = 'n'; renderFocus(); return; }
+  const opBtn = e.target.closest('.op-btn');
+  if (opBtn) { setOp('n', opBtn.dataset.op); return; }
+  const mini = e.target.closest('.mini-btn');
+  if (mini) { mini.dataset.act === 'undo' ? undoTile('n') : clearBuilder('n'); }
+});
+
+document.getElementById('submitBtn').addEventListener('click', submit);
+
+document.getElementById('tempo').addEventListener('input', e => {
+  document.getElementById('tempoVal').textContent = `${e.target.value} BPM`;
+  Tone.Transport.bpm.value = Number(e.target.value);
+});
+
+document.getElementById('playAllBtn').addEventListener('click', playAllUnlocked);
+document.getElementById('stopBtn').addEventListener('click', () => stopAllSafe());
+document.getElementById('endRoundBtn').addEventListener('click', () => {
+  const total = state.targets.length;
+  const done = state.targets.filter(t => t.unlocked).length;
+  setFeedback(`Round ended: ${done}/${total} unlocked, score ${state.score}.`, done === total ? 'good' : null);
+});
+
+function stopAllSafe() {
+  if (state) stopAll();
+}
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+loadRound(0);
+</script>
+</body>
+</html>

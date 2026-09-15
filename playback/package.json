@@ -1,0 +1,14 @@
+{
+  "name": "playback-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Networked prototype for Playback -- collaborative music where you can only control the future.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "bot": "node bot.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

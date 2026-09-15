@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Euclidle — a daily rhythm deduction game</title>
+<script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+<style>
+  :root{
+    --bg: #FBF3E7;
+    --bg-soft: #F3E4D2;
+    --card: #FFFCF7;
+    --card-edge: #EADCC6;
+    --ink: #4A3728;
+    --ink-soft: #8A7660;
+    --accent: #E0884A;
+    --accent-dark: #C46B33;
+    --sage: #8FA876;
+    --sage-dark: #6C8654;
+    --rust: #D66B5C;
+    --amber: #E3B24E;
+    --green: #7FA86F;
+    --shadow: 0 4px 14px rgba(120, 90, 55, 0.12);
+    --shadow-soft: 0 2px 8px rgba(120, 90, 55, 0.08);
+    --radius: 18px;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    min-height:100vh;
+    background: radial-gradient(circle at 20% 0%, var(--bg-soft), var(--bg) 60%);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 24px 16px 60px;
+  }
+  .wrap{ max-width: 720px; margin: 0 auto; }
+
+  header{ text-align:center; margin-bottom: 18px; }
+  header h1{
+    font-size: 2.2rem;
+    margin: 0 0 4px;
+    letter-spacing: 0.5px;
+    color: var(--accent-dark);
+  }
+  header .tagline{ color: var(--ink-soft); font-size: 0.95rem; margin-bottom: 10px; }
+
+  .top-bar{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    flex-wrap: wrap; margin-bottom: 6px;
+  }
+  .pill{
+    background: var(--card);
+    border: 1px solid var(--card-edge);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    box-shadow: var(--shadow-soft);
+  }
+  .pill b{ color: var(--ink); }
+
+  .mode-toggle{
+    display:flex; gap:6px; justify-content:center; margin: 14px 0 20px;
+  }
+  .mode-btn{
+    border: none; padding: 9px 20px; border-radius: 999px; cursor:pointer;
+    font-size: 0.9rem; font-weight:600; background: var(--card-edge); color: var(--ink-soft);
+    transition: all 0.15s ease;
+  }
+  .mode-btn.active{ background: var(--accent); color: white; box-shadow: var(--shadow-soft); }
+  .icon-btn{
+    border:none; background: var(--card); border:1px solid var(--card-edge); color: var(--ink-soft);
+    border-radius: 999px; width: 34px; height:34px; cursor:pointer; font-size:1rem;
+    box-shadow: var(--shadow-soft);
+  }
+  .icon-btn:hover{ color: var(--accent-dark); }
+
+  .card{
+    background: var(--card);
+    border: 1px solid var(--card-edge);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin-bottom: 18px;
+  }
+  .card h2{ margin:0 0 12px; font-size: 1.05rem; color: var(--ink); }
+  .card h2 .sub{ font-weight: 400; color: var(--ink-soft); font-size: 0.85rem; }
+
+  .necklaces{ display:flex; gap: 18px; flex-wrap: wrap; justify-content:center; }
+  .necklace-block{ flex:1; min-width: 220px; text-align:center; }
+  .necklace-block .label{ font-size: 0.85rem; color: var(--ink-soft); margin-bottom: 6px; font-weight:600; }
+  svg.necklace{ width: 190px; height: 190px; }
+
+  .step-dot{ fill: var(--bg-soft); stroke: var(--card-edge); stroke-width: 2; transition: all 0.12s ease; }
+  .step-dot.onset{ fill: var(--accent); stroke: var(--accent-dark); }
+  .step-dot.downbeat{ stroke-width: 3; }
+  .step-dot.onset.downbeat{ fill: var(--rust); stroke: #a8483a; }
+  .step-dot.active{ filter: drop-shadow(0 0 6px rgba(224,136,74,0.9)); transform: scale(1.35); transform-box: fill-box; transform-origin: center; }
+  .guide-ring{ fill:none; stroke: var(--card-edge); stroke-width: 1.5; stroke-dasharray: 2 4; }
+  .mystery-ring{ fill: var(--bg-soft); stroke: var(--card-edge); stroke-width: 2; transition: transform 0.15s ease-out; transform-box: fill-box; transform-origin: center; }
+  .mystery-ring.pulse-now{ transform: scale(1.06); stroke: var(--accent); }
+  .mystery-mark{ font-size: 34px; fill: var(--ink-soft); font-weight: 700; font-family: inherit; }
+
+  .transport{ display:flex; align-items:center; justify-content:center; gap: 14px; flex-wrap:wrap; margin-top: 14px; }
+  .btn{
+    border:none; border-radius: 999px; padding: 10px 20px; font-size: 0.9rem; font-weight:600;
+    cursor:pointer; box-shadow: var(--shadow-soft); transition: transform 0.08s ease;
+  }
+  .btn:active{ transform: scale(0.96); }
+  .btn-primary{ background: var(--accent); color: white; }
+  .btn-secondary{ background: var(--sage); color: white; }
+  .btn-ghost{ background: var(--bg-soft); color: var(--ink); }
+  .btn:disabled{ opacity: 0.45; cursor: not-allowed; }
+
+  .tempo-row{ display:flex; align-items:center; gap:8px; font-size:0.85rem; color: var(--ink-soft); }
+  .tempo-row input[type=range]{ width: 130px; accent-color: var(--accent); }
+
+  .guess-builder{ display:flex; flex-wrap:wrap; gap: 24px; align-items:center; justify-content:center; }
+  .stepper{ text-align:center; }
+  .stepper .stepper-label{ font-size:0.8rem; color: var(--ink-soft); margin-bottom:6px; font-weight:600; }
+  .stepper-row{ display:flex; align-items:center; gap:8px; }
+  .stepper-row button{
+    width: 36px; height:36px; border-radius: 50%; border:none; background: var(--accent);
+    color:white; font-size:1.1rem; cursor:pointer; box-shadow: var(--shadow-soft);
+  }
+  .stepper-row button:disabled{ opacity:0.4; cursor:not-allowed; }
+  .stepper-row input[type=number]{
+    width: 56px; text-align:center; font-size: 1.3rem; border: 2px solid var(--card-edge);
+    border-radius: 10px; padding: 6px 2px; color: var(--ink); font-weight:700; background: var(--bg);
+  }
+
+  .guess-actions{ display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap; }
+
+  .guesses-left{ text-align:center; font-size:0.85rem; color: var(--ink-soft); margin-top:10px; }
+
+  .history-row{
+    border: 1px solid var(--card-edge); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
+    background: var(--bg);
+  }
+  .history-top{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  .feedback-pair{ display:flex; gap: 14px; }
+  .feedback-item{ display:flex; align-items:center; gap: 6px; font-size:0.9rem; }
+  .feedback-item .num-label{ color: var(--ink-soft); font-size:0.75rem; }
+  .arrow{ font-weight:700; font-size: 1rem; }
+  .arrow.higher{ color: var(--accent-dark); }
+  .arrow.lower{ color: var(--sage-dark); }
+  .arrow.exact{ color: var(--green); }
+
+  .diff-row{ display:flex; flex-wrap:wrap; gap:4px; margin-top:10px; }
+  .diff-cell{
+    width: 20px; height:20px; border-radius: 5px; flex-shrink:0;
+  }
+  .diff-cell.match{ background: var(--green); }
+  .diff-cell.overhit{ background: var(--rust); }
+  .diff-cell.missed{ background: var(--amber); }
+  .diff-cell.empty{ background: var(--card-edge); }
+
+  .legend{ display:flex; gap: 14px; flex-wrap:wrap; justify-content:center; font-size: 0.78rem; color: var(--ink-soft); margin-top: 10px; }
+  .legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .swatch{ width:12px; height:12px; border-radius:3px; display:inline-block; }
+
+  .mini-play{ background: none; border: none; color: var(--accent-dark); cursor:pointer; font-size: 0.8rem; font-weight:600; }
+
+  .modal-overlay{
+    position: fixed; inset:0; background: rgba(74, 55, 40, 0.45); display:none;
+    align-items:center; justify-content:center; padding: 20px; z-index: 50;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal{
+    background: var(--card); border-radius: 22px; padding: 26px; max-width: 460px; width:100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.25); max-height: 88vh; overflow-y:auto;
+  }
+  .modal h3{ margin-top:0; color: var(--accent-dark); }
+  .modal .close-x{ float:right; background:none; border:none; font-size:1.3rem; cursor:pointer; color: var(--ink-soft); }
+  .codex-box{
+    background: var(--bg-soft); border-radius: 14px; padding: 14px; margin: 14px 0;
+  }
+  .codex-box .codex-name{ font-weight:700; color: var(--accent-dark); font-size: 1.05rem; }
+  .codex-box .codex-note{ font-size: 0.88rem; color: var(--ink-soft); margin-top:4px; }
+  .share-grid{ font-family: monospace; white-space: pre; background: var(--bg); border-radius: 12px; padding: 12px; font-size: 1.1rem; line-height: 1.35; margin: 14px 0; text-align:center; }
+  .stats-row{ display:flex; justify-content: space-around; text-align:center; margin: 14px 0; }
+  .stats-row div b{ display:block; font-size: 1.4rem; color: var(--accent-dark); }
+  .stats-row div span{ font-size: 0.75rem; color: var(--ink-soft); }
+
+  .toast{
+    position: fixed; bottom: 24px; left:50%; transform: translateX(-50%);
+    background: var(--ink); color: white; padding: 10px 18px; border-radius: 999px;
+    font-size: 0.85rem; opacity:0; pointer-events:none; transition: opacity 0.25s ease;
+    z-index: 60;
+  }
+  .toast.show{ opacity: 0.95; }
+
+  footer{ text-align:center; margin-top: 30px; font-size: 0.78rem; color: var(--ink-soft); }
+  details{ margin-top: 14px; font-size: 0.85rem; color: var(--ink-soft); }
+  details summary{ cursor:pointer; font-weight:600; color: var(--accent-dark); }
+  details p{ line-height: 1.5; }
+
+  @media (max-width: 480px){
+    header h1{ font-size: 1.7rem; }
+    .guess-builder{ gap: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>🎵 Euclidle</h1>
+    <div class="tagline">A cozy daily rhythm deduction game</div>
+  </header>
+
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="modeDailyBtn">Daily</button>
+    <button class="mode-btn" id="modePracticeBtn">Practice</button>
+    <button class="icon-btn" id="howToBtn" title="How to play">?</button>
+  </div>
+
+  <div class="top-bar" id="topBar">
+    <span class="pill" id="dayPill">Day #—</span>
+    <span class="pill" id="streakPill">🔥 Streak: 0</span>
+    <span class="pill" id="guessesPill">Guess 0 / 6</span>
+  </div>
+
+  <div class="card">
+    <h2>Listen <span class="sub">— re-hear as much as you like</span></h2>
+    <div class="necklaces">
+      <div class="necklace-block">
+        <div class="label" id="targetLabel">Target</div>
+        <svg class="necklace" id="targetSvg"></svg>
+      </div>
+      <div class="necklace-block">
+        <div class="label">Your guess (preview)</div>
+        <svg class="necklace" id="guessSvg"></svg>
+      </div>
+    </div>
+    <div class="transport">
+      <button class="btn btn-primary" id="playTargetBtn">▶ Play target</button>
+      <button class="btn btn-secondary" id="playGuessBtn">▶ Play my guess</button>
+      <div class="tempo-row">
+        <span>Tempo</span>
+        <input type="range" id="tempoSlider" min="60" max="160" value="110" step="1">
+        <span id="tempoValue">110 BPM</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Guess <span class="sub">— onset count (k) and cycle length (n)</span></h2>
+    <div class="guess-builder">
+      <div class="stepper">
+        <div class="stepper-label">Onsets (k)</div>
+        <div class="stepper-row">
+          <button id="kMinus">−</button>
+          <input type="number" id="kInput" value="3">
+          <button id="kPlus">+</button>
+        </div>
+      </div>
+      <div class="stepper">
+        <div class="stepper-label">Steps (n)</div>
+        <div class="stepper-row">
+          <button id="nMinus">−</button>
+          <input type="number" id="nInput" value="8">
+          <button id="nPlus">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="guess-actions">
+      <button class="btn btn-primary" id="submitGuessBtn">Submit guess</button>
+      <button class="btn btn-ghost" id="practiceNewBtn" style="display:none;">🔀 New puzzle</button>
+    </div>
+    <div class="guesses-left" id="guessesLeftText">6 guesses remaining</div>
+  </div>
+
+  <div class="card" id="historyCard" style="display:none;">
+    <h2>Your guesses</h2>
+    <div id="historyList"></div>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--green)"></i> match</span>
+      <span><i class="swatch" style="background:var(--rust)"></i> your onset, target rest</span>
+      <span><i class="swatch" style="background:var(--amber)"></i> target onset you missed</span>
+      <span><i class="swatch" style="background:var(--card-edge)"></i> rest</span>
+    </div>
+  </div>
+
+  <footer>
+    <details>
+      <summary>What's a Euclidean rhythm?</summary>
+      <p>The Björklund / Euclidean algorithm spaces <b>k</b> onsets (hits) as evenly as possible across <b>n</b> steps — the same math behind the Euclidean algorithm for GCDs, applied to rhythm. Today's secret is always a <b>coprime</b> pair (gcd(k,n) = 1), which guarantees the pattern has a unique period and can't be confused with a shorter repeating pattern — so every sound maps back to exactly one answer.</p>
+    </details>
+    <p style="margin-top:16px;">Made with Tone.js · No spoilers in the share grid, just colors.</p>
+  </footer>
+
+</div>
+
+<!-- Result modal -->
+<div class="modal-overlay" id="resultOverlay">
+  <div class="modal">
+    <button class="close-x" id="closeResultBtn">✕</button>
+    <h3 id="resultTitle">🎉 Solved!</h3>
+    <p id="resultSub"></p>
+    <div class="codex-box">
+      <div class="codex-name" id="codexName"></div>
+      <div class="codex-note" id="codexNote"></div>
+    </div>
+    <div class="share-grid" id="shareGridDisplay"></div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="guess-actions">
+      <button class="btn btn-primary" id="copyShareBtn">📋 Copy result</button>
+      <button class="btn btn-secondary" id="replayResolvedBtn" style="display:none;">▶ Hear it resolved</button>
+    </div>
+  </div>
+</div>
+
+<!-- How to play modal -->
+<div class="modal-overlay" id="howToOverlay">
+  <div class="modal">
+    <button class="close-x" id="closeHowToBtn">✕</button>
+    <h3>How to play</h3>
+    <p>Every day, Euclidle picks one secret rhythm — <b>k</b> onsets spread as evenly as possible across <b>n</b> steps (a Euclidean rhythm), always with an audible downbeat on step 0.</p>
+    <p>Hit <b>Play target</b> to listen, then guess the two numbers <b>k</b> and <b>n</b>. After each guess you get:</p>
+    <p>• <b>Arrows</b> on k and n telling you to go higher or lower.<br>
+       • A <b>colored step diff</b> comparing your guess's pattern to the target, step by step.</p>
+    <p>You have 6 guesses. Re-hear the target and your guess as often as you like — this is a cozy puzzle, not a stingy one. The secret is always coprime (gcd(k,n)=1), so there's exactly one right answer — no rotations to worry about.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const $ = (id) => document.getElementById(id);
+
+  // ---------------------------------------------------------------------
+  // BJÖRKLUND'S ALGORITHM
+  // Generates a Euclidean rhythm: distributes k onsets ("1") as evenly as
+  // possible across n steps ("0" = rest), returning a binary array.
+  //
+  // Method: start with k singleton groups [1] and (n-k) singleton groups
+  // [0]. Repeatedly merge one group from the smaller set onto one group
+  // from the larger set (pairing them front-to-front), leaving a shrinking
+  // "remainder" set, until at most one remainder group is left. This is
+  // exactly the Euclidean algorithm (like computing a GCD) run on groups
+  // of onsets/rests instead of on plain integers — hence the name.
+  //
+  // Because the construction always starts from groups beginning with a
+  // "1", the very first element of the result is always an onset — so the
+  // pattern is automatically anchored with its first onset on step 0
+  // (the downbeat). Euclidle never asks about rotation beyond this.
+  //
+  // Verified against the canonical examples from Toussaint's 2005 paper
+  // "The Euclidean Algorithm Generates Traditional Musical Rhythms":
+  //   E(3,8) = 10010010  (tresillo)
+  //   E(5,8) = 10110110  (cinquillo)
+  //   E(2,5) = 10100
+  // See the self-test block near the bottom of this script.
+  // ---------------------------------------------------------------------
+  function bjorklund(k, n) {
+    if (n <= 0) return [];
+    if (k <= 0) return new Array(n).fill(0);
+    if (k >= n) return new Array(n).fill(1);
+
+    let a = Array.from({ length: k }, () => [1]);     // k onset-groups
+    let b = Array.from({ length: n - k }, () => [0]);  // (n-k) rest-groups
+
+    while (b.length > 1) {
+      const m = Math.min(a.length, b.length);
+      const merged = [];
+      for (let i = 0; i < m; i++) merged.push(a[i].concat(b[i]));
+      const leftover = a.length > b.length ? a.slice(m) : b.slice(m);
+      a = merged;
+      b = leftover;
+    }
+    return a.concat(b).flat();
+  }
+
+  // Self-test (dev sanity check only — does not affect gameplay).
+  console.assert(bjorklund(3, 8).join('') === '10010010', 'Björklund E(3,8) mismatch');
+  console.assert(bjorklund(5, 8).join('') === '10110110', 'Björklund E(5,8) mismatch');
+  console.assert(bjorklund(2, 5).join('') === '10100', 'Björklund E(2,5) mismatch');
+
+  function gcd(a, b) { while (b) { [a, b] = [b, a % b]; } return a; }
+
+  // ---------------------------------------------------------------------
+  // WELL-POSEDNESS: the daily/practice secret is ALWAYS drawn from pairs
+  // with gcd(k,n) === 1. A non-coprime pair (e.g. k=4,n=8) would sound
+  // identical to its reduced form (k=2,n=4) repeated twice, so the puzzle
+  // would have no unique answer. We build the coprime pool once and only
+  // ever pick from it.
+  // ---------------------------------------------------------------------
+  const N_MIN = 4, N_MAX = 16;
+  function buildCoprimePool() {
+    const pool = [];
+    for (let n = N_MIN; n <= N_MAX; n++) {
+      for (let k = 2; k < n; k++) {
+        if (gcd(k, n) === 1) pool.push({ k, n });
+      }
+    }
+    return pool;
+  }
+  const COPRIME_POOL = buildCoprimePool();
+
+  // ---------------------------------------------------------------------
+  // Seeded PRNG (xmur3 hash -> mulberry32 generator). Small, public-domain
+  // style helpers used purely so the daily pick is deterministic per date.
+  // ---------------------------------------------------------------------
+  function xmur3(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return function () {
+      h = Math.imul(h ^ (h >>> 16), 2246822507);
+      h = Math.imul(h ^ (h >>> 13), 3266489909);
+      h ^= h >>> 16;
+      return h >>> 0;
+    };
+  }
+  function mulberry32(seed) {
+    let a = seed;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---------------------------------------------------------------------
+  // DAILY SEED: today's local calendar date (YYYY-MM-DD) is hashed into a
+  // seed, which drives a deterministic pick from COPRIME_POOL. Every
+  // player who opens Euclidle on the same calendar day gets the same
+  // (k,n) — no server needed.
+  // ---------------------------------------------------------------------
+  function dateStr(d = new Date()) {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  const EPOCH = new Date(2024, 0, 1);
+  function dayNumber(d = new Date()) {
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    return Math.floor((start - EPOCH) / 86400000) + 1;
+  }
+  function getDailySecret(d = new Date()) {
+    const seedFn = xmur3('euclidle-' + dateStr(d));
+    const rand = mulberry32(seedFn());
+    const idx = Math.floor(rand() * COPRIME_POOL.length);
+    return COPRIME_POOL[idx];
+  }
+  function getRandomSecret() {
+    return COPRIME_POOL[Math.floor(Math.random() * COPRIME_POOL.length)];
+  }
+
+  // ---------------------------------------------------------------------
+  // Codex: named world rhythms, keyed by "k,n".
+  // ---------------------------------------------------------------------
+  const CODEX = {
+    '3,8': { name: 'Tresillo', note: 'A cornerstone of Cuban son and the wider West African-rooted clave family — the "long-short-short" three-against-eight feel.' },
+    '5,8': { name: 'Cinquillo', note: 'The five-hit Cuban pattern that dances alongside the tresillo in danzón and contradanza.' },
+    '2,5': { name: 'Two-in-five', note: 'A spare, evenly-spaced two-pulse feel found in Korean and various other traditional musics.' },
+    '7,12': { name: 'Bembé', note: 'A seven-stroke bell pattern from West African bembé traditions, carried into Afro-Cuban music.' },
+    '4,9': { name: 'Aksak', note: 'A "limping" nine-pulse feel rooted in Turkish aksak (uneven) rhythmic traditions.' },
+    '5,16': { name: 'Bossa-ish clave', note: 'A loping five-in-sixteen feel with a Brazilian bossa nova flavor.' },
+  };
+  function getCodexEntry(k, n) {
+    const hit = CODEX[`${k},${n}`];
+    if (hit) return hit;
+    return { name: `E(${k}, ${n})`, note: `A coprime Euclidean rhythm — ${k} onsets spread as evenly as possible across ${n} steps. Every coprime pair makes its own unique, non-repeating groove.` };
+  }
+
+  // ---------------------------------------------------------------------
+  // localStorage state
+  // ---------------------------------------------------------------------
+  const LS_KEY = 'euclidle-v1';
+  function defaultState() {
+    return {
+      daily: { dateStr: null, guesses: [], solved: false, finished: false, statsCounted: false },
+      stats: { played: 0, won: 0, currentStreak: 0, maxStreak: 0, distribution: [0, 0, 0, 0, 0, 0], lastWinDateStr: null },
+    };
+  }
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return defaultState();
+      const parsed = JSON.parse(raw);
+      return { ...defaultState(), ...parsed, stats: { ...defaultState().stats, ...parsed.stats }, daily: { ...defaultState().daily, ...parsed.daily } };
+    } catch (e) { return defaultState(); }
+  }
+  function saveState() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+
+  const state = loadState();
+  const today = dateStr();
+  if (state.daily.dateStr !== today) {
+    state.daily = { dateStr: today, guesses: [], solved: false, finished: false, statsCounted: false };
+    saveState();
+  }
+
+  function finishDailyStats(won, guessCount) {
+    if (state.daily.statsCounted) return;
+    state.daily.statsCounted = true;
+    state.stats.played++;
+    if (won) {
+      state.stats.won++;
+      const yesterday = dateStr(new Date(Date.now() - 86400000));
+      state.stats.currentStreak = (state.stats.lastWinDateStr === yesterday) ? state.stats.currentStreak + 1 : 1;
+      state.stats.lastWinDateStr = today;
+      state.stats.maxStreak = Math.max(state.stats.maxStreak, state.stats.currentStreak);
+      state.stats.distribution[guessCount - 1]++;
+    } else {
+      state.stats.currentStreak = 0;
+    }
+    saveState();
+  }
+
+  // ---------------------------------------------------------------------
+  // Game state
+  // ---------------------------------------------------------------------
+  const MAX_GUESSES = 6;
+  let mode = 'daily';
+
+  const daily = { secret: getDailySecret(), pattern: null, guesses: [], finished: false, solved: false };
+  daily.pattern = bjorklund(daily.secret.k, daily.secret.n);
+  daily.guesses = state.daily.guesses.slice();
+  daily.finished = state.daily.finished;
+  daily.solved = state.daily.solved;
+
+  let practice = null;
+  function newPractice() {
+    const secret = getRandomSecret();
+    practice = { secret, pattern: bjorklund(secret.k, secret.n), guesses: [], finished: false, solved: false };
+  }
+  newPractice();
+
+  function game() { return mode === 'daily' ? daily : practice; }
+
+  function computeDiff(target, guess) {
+    const len = Math.max(target.length, guess.length);
+    const cells = [];
+    for (let i = 0; i < len; i++) {
+      const t = i < target.length ? target[i] : 0;
+      const g = i < guess.length ? guess[i] : 0;
+      if (t === 1 && g === 1) cells.push('match');
+      else if (t === 0 && g === 1) cells.push('overhit');
+      else if (t === 1 && g === 0) cells.push('missed');
+      else cells.push('empty');
+    }
+    return cells;
+  }
+  const EMOJI = { match: '🟩', overhit: '🟥', missed: '🟨', empty: '⬛' };
+
+  // ---------------------------------------------------------------------
+  // Audio (Tone.js)
+  // ---------------------------------------------------------------------
+  let audioReady = false;
+  let kickSynth, clickSynth, bassSynth, chimeSynth;
+  function ensureSynths() {
+    if (audioReady) return;
+    kickSynth = new Tone.MembraneSynth({ pitchDecay: 0.02, octaves: 4, envelope: { attack: 0.001, decay: 0.35, sustain: 0 } }).toDestination();
+    clickSynth = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 } }).toDestination();
+    clickSynth.volume.value = -6;
+    bassSynth = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.005, decay: 0.4, sustain: 0.1, release: 0.3 } }).toDestination();
+    bassSynth.volume.value = -4;
+    chimeSynth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.005, decay: 0.5, sustain: 0.05, release: 0.6 } }).toDestination();
+    chimeSynth.volume.value = -8;
+    audioReady = true;
+  }
+
+  let currentSequence = null;
+  let currentlyPlaying = null; // 'target' | 'guess' | null
+  let flourishTimeout = null;
+
+  function stopPlayback() {
+    if (currentSequence) { currentSequence.stop(0); currentSequence.dispose(); currentSequence = null; }
+    Tone.Transport.stop();
+    Tone.Transport.cancel();
+    if (flourishTimeout) { clearTimeout(flourishTimeout); flourishTimeout = null; }
+    currentlyPlaying = null;
+    clearActiveSteps();
+    updateTransportUI();
+  }
+
+  function clearActiveSteps() {
+    document.querySelectorAll('.step-dot.active').forEach(d => d.classList.remove('active'));
+  }
+
+  async function playPattern(pattern, which, svgEl, mystery) {
+    ensureSynths();
+    await Tone.start();
+    if (currentlyPlaying === which) { stopPlayback(); return; }
+    stopPlayback();
+    Tone.Transport.bpm.value = Number($('tempoSlider').value);
+    const indices = pattern.map((_, i) => i);
+    currentSequence = new Tone.Sequence((time, i) => {
+      const onset = pattern[i] === 1;
+      if (onset) {
+        if (i === 0) kickSynth.triggerAttackRelease('C2', '8n', time, 1.0);
+        else clickSynth.triggerAttackRelease('E5', '16n', time, 0.7);
+      }
+      Tone.Draw.schedule(() => {
+        if (mystery) {
+          if (onset) {
+            const ring = svgEl.querySelector('.mystery-ring');
+            if (ring) { ring.classList.remove('pulse-now'); void ring.offsetWidth; ring.classList.add('pulse-now'); }
+          }
+        } else {
+          svgEl.querySelectorAll('.step-dot').forEach(d => d.classList.remove('active'));
+          const dot = svgEl.querySelector(`.step-dot[data-step="${i}"]`);
+          if (dot) dot.classList.add('active');
+        }
+      }, time);
+    }, indices, '16n');
+    currentSequence.loop = true;
+    currentSequence.start(0);
+    Tone.Transport.start();
+    currentlyPlaying = which;
+    updateTransportUI();
+  }
+
+  async function playSolveFlourish(pattern) {
+    ensureSynths();
+    await Tone.start();
+    stopPlayback();
+    const bpm = Number($('tempoSlider').value);
+    Tone.Transport.bpm.value = bpm;
+    const svgEl = $('targetSvg');
+    const indices = pattern.map((_, i) => i);
+    const loops = 2;
+    let loopCount = 0;
+    currentSequence = new Tone.Sequence((time, i) => {
+      const onset = pattern[i] === 1;
+      if (onset) {
+        if (i === 0) {
+          kickSynth.triggerAttackRelease('C2', '8n', time, 1.0);
+          bassSynth.triggerAttackRelease('C2', '4n', time);
+        } else {
+          clickSynth.triggerAttackRelease('E5', '16n', time, 0.75);
+        }
+      }
+      Tone.Draw.schedule(() => {
+        svgEl.querySelectorAll('.step-dot').forEach(d => d.classList.remove('active'));
+        const dot = svgEl.querySelector(`.step-dot[data-step="${i}"]`);
+        if (dot) dot.classList.add('active');
+      }, time);
+      if (i === pattern.length - 1) loopCount++;
+    }, indices, '16n');
+    currentSequence.loop = true;
+    currentSequence.start(0);
+    Tone.Transport.start();
+    currentlyPlaying = 'flourish';
+    updateTransportUI();
+
+    const stepSec = (60 / bpm) / 4;
+    const cycleSec = pattern.length * stepSec;
+    flourishTimeout = setTimeout(() => {
+      stopPlayback();
+      const now = Tone.now();
+      chimeSynth.triggerAttackRelease(['C4', 'E4', 'G4'], '4n', now);
+      chimeSynth.triggerAttackRelease(['E4', 'G4', 'C5'], '4n', now + 0.22);
+    }, loops * cycleSec * 1000);
+  }
+
+  function updateTransportUI() {
+    $('playTargetBtn').textContent = currentlyPlaying === 'target' ? '⏸ Stop target' : '▶ Play target';
+    $('playGuessBtn').textContent = currentlyPlaying === 'guess' ? '⏸ Stop guess' : '▶ Play my guess';
+  }
+
+  // ---------------------------------------------------------------------
+  // Necklace rendering
+  // ---------------------------------------------------------------------
+  function polarPoint(cx, cy, r, angleDeg) {
+    const rad = (angleDeg - 90) * Math.PI / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+  function renderNecklace(svgEl, pattern, mystery) {
+    svgEl.innerHTML = '';
+    const size = 190, cx = size / 2, cy = size / 2, r = 74;
+    svgEl.setAttribute('viewBox', `0 0 ${size} ${size}`);
+    if (mystery) {
+      const ring = document.createElementNS(SVGNS, 'circle');
+      ring.setAttribute('cx', cx); ring.setAttribute('cy', cy); ring.setAttribute('r', r);
+      ring.setAttribute('class', 'mystery-ring');
+      svgEl.appendChild(ring);
+      const q = document.createElementNS(SVGNS, 'text');
+      q.setAttribute('x', cx); q.setAttribute('y', cy + 10); q.setAttribute('text-anchor', 'middle');
+      q.setAttribute('class', 'mystery-mark');
+      q.textContent = '?';
+      svgEl.appendChild(q);
+      return;
+    }
+    const n = pattern.length;
+    const guide = document.createElementNS(SVGNS, 'circle');
+    guide.setAttribute('cx', cx); guide.setAttribute('cy', cy); guide.setAttribute('r', r);
+    guide.setAttribute('class', 'guide-ring');
+    svgEl.appendChild(guide);
+    for (let i = 0; i < n; i++) {
+      const angle = (360 / n) * i;
+      const p = polarPoint(cx, cy, r, angle);
+      const dot = document.createElementNS(SVGNS, 'circle');
+      dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y);
+      dot.setAttribute('r', i === 0 ? 9 : 7);
+      let cls = 'step-dot';
+      if (pattern[i] === 1) cls += ' onset';
+      if (i === 0) cls += ' downbeat';
+      dot.setAttribute('class', cls);
+      dot.dataset.step = i;
+      svgEl.appendChild(dot);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Guess input steppers
+  // ---------------------------------------------------------------------
+  let inputK = 3, inputN = 8;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  function setN(n) {
+    inputN = clamp(Math.round(n) || N_MIN, N_MIN, N_MAX);
+    inputK = clamp(inputK, 2, inputN - 1);
+    syncStepperUI();
+    renderGuessPreview();
+  }
+  function setK(k) {
+    inputK = clamp(Math.round(k) || 2, 2, inputN - 1);
+    syncStepperUI();
+    renderGuessPreview();
+  }
+  function syncStepperUI() {
+    $('kInput').value = inputK;
+    $('nInput').value = inputN;
+  }
+  function renderGuessPreview() {
+    renderNecklace($('guessSvg'), bjorklund(inputK, inputN), false);
+  }
+
+  $('kMinus').onclick = () => setK(inputK - 1);
+  $('kPlus').onclick = () => setK(inputK + 1);
+  $('nMinus').onclick = () => setN(inputN - 1);
+  $('nPlus').onclick = () => setN(inputN + 1);
+  $('kInput').oninput = (e) => setK(parseInt(e.target.value, 10));
+  $('nInput').oninput = (e) => setN(parseInt(e.target.value, 10));
+  $('kInput').onkeydown = (e) => { if (e.key === 'Enter') submitGuess(); };
+  $('nInput').onkeydown = (e) => { if (e.key === 'Enter') submitGuess(); };
+
+  // ---------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------
+  function feedbackArrow(guessVal, targetVal) {
+    if (guessVal === targetVal) return { symbol: '✓', cls: 'exact', text: 'exact' };
+    if (guessVal < targetVal) return { symbol: '▲', cls: 'higher', text: 'higher' };
+    return { symbol: '▼', cls: 'lower', text: 'lower' };
+  }
+
+  function renderHistory() {
+    const g = game();
+    const list = $('historyList');
+    list.innerHTML = '';
+    $('historyCard').style.display = g.guesses.length ? 'block' : 'none';
+    g.guesses.forEach((guess, idx) => {
+      const guessPattern = bjorklund(guess.k, guess.n);
+      const diff = computeDiff(g.pattern, guessPattern);
+      const kFb = feedbackArrow(guess.k, g.secret.k);
+      const nFb = feedbackArrow(guess.n, g.secret.n);
+      const row = document.createElement('div');
+      row.className = 'history-row';
+      row.innerHTML = `
+        <div class="history-top">
+          <div class="feedback-pair">
+            <div class="feedback-item"><span class="num-label">k=${guess.k}</span><span class="arrow ${kFb.cls}">${kFb.symbol}</span></div>
+            <div class="feedback-item"><span class="num-label">n=${guess.n}</span><span class="arrow ${nFb.cls}">${nFb.symbol}</span></div>
+          </div>
+          <button class="mini-play" data-idx="${idx}">▶ replay</button>
+        </div>
+        <div class="diff-row">${diff.map(c => `<div class="diff-cell ${c}"></div>`).join('')}</div>
+      `;
+      row.querySelector('.mini-play').onclick = () => {
+        const tempSvg = document.createElementNS(SVGNS, 'svg');
+        playPattern(guessPattern, 'guess', $('guessSvg'), false);
+      };
+      list.appendChild(row);
+    });
+  }
+
+  function renderTopBar() {
+    if (mode === 'daily') {
+      $('dayPill').textContent = `Day #${dayNumber()}`;
+      $('streakPill').style.display = 'inline-block';
+      $('streakPill').textContent = `🔥 Streak: ${state.stats.currentStreak}`;
+      $('practiceNewBtn').style.display = 'none';
+    } else {
+      $('dayPill').textContent = 'Practice mode';
+      $('streakPill').style.display = 'none';
+      $('practiceNewBtn').style.display = 'inline-block';
+    }
+    const g = game();
+    $('guessesPill').textContent = `Guess ${g.guesses.length} / ${MAX_GUESSES}`;
+  }
+
+  function renderAll() {
+    const g = game();
+    renderTopBar();
+    renderNecklace($('targetSvg'), g.pattern, !g.finished);
+    $('targetLabel').textContent = g.finished ? `Target (${g.secret.k}, ${g.secret.n})` : 'Target (mystery)';
+    renderGuessPreview();
+    renderHistory();
+
+    const remaining = MAX_GUESSES - g.guesses.length;
+    $('guessesLeftText').textContent = g.finished ? (g.solved ? 'Solved!' : 'Out of guesses — see the reveal below') : `${remaining} guess${remaining === 1 ? '' : 'es'} remaining`;
+    $('submitGuessBtn').disabled = g.finished;
+    $('kMinus').disabled = g.finished; $('kPlus').disabled = g.finished;
+    $('nMinus').disabled = g.finished; $('nPlus').disabled = g.finished;
+    $('kInput').disabled = g.finished; $('nInput').disabled = g.finished;
+  }
+
+  // ---------------------------------------------------------------------
+  // Guess submission
+  // ---------------------------------------------------------------------
+  function submitGuess() {
+    const g = game();
+    if (g.finished) return;
+    const guess = { k: inputK, n: inputN };
+    g.guesses.push(guess);
+    const won = guess.k === g.secret.k && guess.n === g.secret.n;
+    if (won) { g.solved = true; g.finished = true; }
+    else if (g.guesses.length >= MAX_GUESSES) { g.finished = true; g.solved = false; }
+
+    if (mode === 'daily') {
+      state.daily.guesses = g.guesses;
+      state.daily.solved = g.solved;
+      state.daily.finished = g.finished;
+      saveState();
+      if (g.finished) finishDailyStats(g.solved, g.guesses.length);
+    }
+
+    renderAll();
+
+    if (g.finished) {
+      if (g.solved) {
+        playSolveFlourish(g.pattern);
+      } else {
+        stopPlayback();
+        renderNecklace($('targetSvg'), g.pattern, false);
+      }
+      openResultModal();
+    }
+  }
+  $('submitGuessBtn').onclick = submitGuess;
+
+  $('playTargetBtn').onclick = () => {
+    const g = game();
+    playPattern(g.pattern, 'target', $('targetSvg'), !g.finished);
+  };
+  $('playGuessBtn').onclick = () => {
+    playPattern(bjorklund(inputK, inputN), 'guess', $('guessSvg'), false);
+  };
+  $('tempoSlider').oninput = (e) => {
+    $('tempoValue').textContent = `${e.target.value} BPM`;
+    if (currentlyPlaying) Tone.Transport.bpm.value = Number(e.target.value);
+  };
+
+  // ---------------------------------------------------------------------
+  // Result modal + share
+  // ---------------------------------------------------------------------
+  function buildShareGrid(g) {
+    return g.guesses.map(guess => {
+      const diff = computeDiff(g.pattern, bjorklund(guess.k, guess.n));
+      return diff.map(c => EMOJI[c]).join('');
+    }).join('\n');
+  }
+  function buildShareText(g) {
+    const header = mode === 'daily'
+      ? `🎵 Euclidle #${dayNumber()} — ${g.solved ? g.guesses.length : 'X'}/${MAX_GUESSES}`
+      : `🎵 Euclidle (practice) — ${g.solved ? g.guesses.length : 'X'}/${MAX_GUESSES}`;
+    return `${header}\n${buildShareGrid(g)}`;
+  }
+
+  function openResultModal() {
+    const g = game();
+    $('resultTitle').textContent = g.solved ? '🎉 Solved!' : '💛 So close — here\'s today\'s rhythm';
+    $('resultSub').textContent = g.solved
+      ? `You found it in ${g.guesses.length} guess${g.guesses.length === 1 ? '' : 'es'}: k=${g.secret.k}, n=${g.secret.n}.`
+      : `The answer was k=${g.secret.k}, n=${g.secret.n}. Come back tomorrow for a new one!`;
+    const codex = getCodexEntry(g.secret.k, g.secret.n);
+    $('codexName').textContent = codex.name;
+    $('codexNote').textContent = codex.note;
+    $('shareGridDisplay').textContent = buildShareText(g);
+
+    const statsRow = $('statsRow');
+    if (mode === 'daily') {
+      statsRow.style.display = 'flex';
+      statsRow.innerHTML = `
+        <div><b>${state.stats.played}</b><span>Played</span></div>
+        <div><b>${state.stats.played ? Math.round(100 * state.stats.won / state.stats.played) : 0}%</b><span>Win rate</span></div>
+        <div><b>${state.stats.currentStreak}</b><span>Streak</span></div>
+        <div><b>${state.stats.maxStreak}</b><span>Best</span></div>
+      `;
+    } else {
+      statsRow.style.display = 'none';
+    }
+    $('replayResolvedBtn').style.display = g.solved ? 'inline-block' : 'none';
+    $('resultOverlay').classList.add('open');
+  }
+  $('closeResultBtn').onclick = () => $('resultOverlay').classList.remove('open');
+  $('resultOverlay').onclick = (e) => { if (e.target === $('resultOverlay')) $('resultOverlay').classList.remove('open'); };
+  $('replayResolvedBtn').onclick = () => playSolveFlourish(game().pattern);
+
+  $('copyShareBtn').onclick = async () => {
+    const text = buildShareText(game());
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Copied to clipboard!');
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); showToast('Copied to clipboard!'); }
+      catch (e2) { showToast('Copy failed — select manually.'); }
+      document.body.removeChild(ta);
+    }
+  };
+
+  function showToast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  // ---------------------------------------------------------------------
+  // How-to modal
+  // ---------------------------------------------------------------------
+  $('howToBtn').onclick = () => $('howToOverlay').classList.add('open');
+  $('closeHowToBtn').onclick = () => $('howToOverlay').classList.remove('open');
+  $('howToOverlay').onclick = (e) => { if (e.target === $('howToOverlay')) $('howToOverlay').classList.remove('open'); };
+
+  // ---------------------------------------------------------------------
+  // Mode switching
+  // ---------------------------------------------------------------------
+  $('modeDailyBtn').onclick = () => {
+    if (mode === 'daily') return;
+    stopPlayback();
+    mode = 'daily';
+    $('modeDailyBtn').classList.add('active');
+    $('modePracticeBtn').classList.remove('active');
+    setK(3); setN(8);
+    renderAll();
+  };
+  $('modePracticeBtn').onclick = () => {
+    if (mode === 'practice') return;
+    stopPlayback();
+    mode = 'practice';
+    $('modePracticeBtn').classList.add('active');
+    $('modeDailyBtn').classList.remove('active');
+    setK(3); setN(8);
+    renderAll();
+  };
+  $('practiceNewBtn').onclick = () => {
+    stopPlayback();
+    newPractice();
+    setK(3); setN(8);
+    renderAll();
+  };
+
+  // ---------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------
+  if (typeof Tone === 'undefined') {
+    showToast('Audio library failed to load — check your internet connection.');
+  }
+  syncStepperUI();
+  renderAll();
+  if (daily.finished) {
+    // resumed a completed puzzle from earlier today
+  }
+})();
+</script>
+</body>
+</html>

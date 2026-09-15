@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music Games</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafafa;
+    --fg: #1a1a1a;
+    --muted: #666;
+    --card-bg: #fff;
+    --card-border: #e2e2e2;
+    --accent: #3a3a3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121212;
+      --fg: #ededed;
+      --muted: #999;
+      --card-bg: #1c1c1c;
+      --card-border: #2e2e2e;
+      --accent: #ccc;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 4rem 1.5rem;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 {
+    font-size: 1.9rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.01em;
+  }
+  p.tagline {
+    color: var(--muted);
+    margin: 0 0 3rem;
+    font-size: 1rem;
+  }
+  ul.games {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    width: 100%;
+    max-width: 720px;
+  }
+  li a {
+    display: block;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    text-decoration: none;
+    color: var(--fg);
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  li a:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .game-name {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+  }
+  .game-desc {
+    font-size: 0.9rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+  <h1>Music Games</h1>
+  <p class="tagline">A collection of rhythm and music puzzle games.</p>
+  <ul class="games">
+    <li>
+      <a href="euclidle/">
+        <div class="game-name">Euclidle</div>
+        <div class="game-desc">A daily rhythm deduction game</div>
+      </a>
+    </li>
+    <li>
+      <a href="interlock/">
+        <div class="game-name">Interlock</div>
+        <div class="game-desc">A rhythm puzzle</div>
+      </a>
+    </li>
+    <li>
+      <a href="patrol/">
+        <div class="game-name">Patrol</div>
+        <div class="game-desc">A rhythm stealth puzzle</div>
+      </a>
+    </li>
+    <li>
+      <a href="playback/public/">
+        <div class="game-name">Playback</div>
+        <div class="game-desc">A music game</div>
+      </a>
+    </li>
+    <li>
+      <a href="rhythm-factory/">
+        <div class="game-name">Rhythm Factory</div>
+        <div class="game-desc">A music game</div>
+      </a>
+    </li>
+  </ul>
+</body>
+</html>

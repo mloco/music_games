@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Playback</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <section id="screen-lobby" class="screen">
+      <h1>Playback</h1>
+      <p class="tagline">A game about making collaborative music together.</p>
+      <label class="field">
+        <span>Your name</span>
+        <input id="name-input" maxlength="20" placeholder="e.g. Riley">
+      </label>
+      <div class="lobby-actions">
+        <button id="create-btn" class="btn primary">Create room</button>
+        <div class="join-row">
+          <input id="room-code-input" maxlength="4" placeholder="ROOM CODE" style="text-transform:uppercase">
+          <button id="join-btn" class="btn">Join</button>
+        </div>
+      </div>
+      <p id="lobby-error" class="error"></p>
+    </section>
+
+    <section id="screen-room" class="screen hidden">
+      <h2>Room <span id="room-code-display"></span></h2>
+      <p>Share this code with up to 3 other players, or fill empty seats with bots.</p>
+      <ul id="player-list"></ul>
+      <div class="room-actions">
+        <button id="add-bot-btn" class="btn">Add bot</button>
+        <button id="start-btn" class="btn primary">Start jam</button>
+      </div>
+    </section>
+
+    <section id="screen-game" class="screen hidden">
+      <header class="game-header">
+        <div>Room <span id="room-code-display-2"></span></div>
+        <div id="stage-label"></div>
+        <button id="end-btn" class="btn hidden">End jam</button>
+      </header>
+      <div id="stage-banner" class="hidden"></div>
+      <div id="grids-panel"></div>
+    </section>
+
+  </div>
+  <script src="client.js"></script>
+</body>
+</html>
