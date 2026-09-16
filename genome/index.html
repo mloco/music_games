@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genome — evolution sanity check</title>
+<script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1013;
+    --panel: #17181d;
+    --panel-border: #2a2c33;
+    --fg: #eceef2;
+    --muted: #8a8d98;
+    --accent: #ffd23f;
+    --accent-dim: #6b5f2a;
+    --world-color: #ff6b5b;
+    --dot-empty: #2e313a;
+    --fertile: #4fd67a;
+    --infertile: #ff6b5b;
+    --grid-line: #23252c;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f4f6;
+      --panel: #fff;
+      --panel-border: #e0e0e4;
+      --fg: #1a1a1e;
+      --muted: #6b6d76;
+      --dot-empty: #dcdde2;
+      --grid-line: #ececef;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 1.75rem 1.5rem 4rem;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header { margin-bottom: 1.25rem; }
+  h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 0.2rem; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 0.92rem; max-width: 62ch; line-height: 1.45; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+  }
+  .row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .row > .panel { flex: 1 1 320px; }
+  h2 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.7rem; }
+  .controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem 1.1rem; }
+  .ctl { display: flex; flex-direction: column; gap: 0.25rem; }
+  .ctl label { font-size: 0.78rem; color: var(--muted); display: flex; justify-content: space-between; }
+  .ctl input[type=range] { width: 100%; accent-color: var(--accent); }
+  .buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.85rem; }
+  button {
+    background: #23252c;
+    color: var(--fg);
+    border: 1px solid var(--panel-border);
+    border-radius: 7px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  @media (prefers-color-scheme: light) { button { background: #eceef2; } }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #1a1500; border-color: var(--accent); }
+  button.active { outline: 2px solid var(--accent); }
+  .stat-line { display: flex; gap: 1.4rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+  .stat-line b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .world-necklace-wrap { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; }
+  .necklace-caption { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .audio-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.9rem; }
+  .voice-ctl { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--muted); }
+  .voice-ctl .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .velocity-row { display: flex; align-items: flex-end; gap: 1.2rem; flex-wrap: wrap; padding: 0.6rem 0; border-bottom: 1px solid var(--panel-border); }
+  .velocity-row:last-child { border-bottom: none; }
+  .velocity-row .voice-label { width: 130px; flex-shrink: 0; font-size: 0.85rem; font-weight: 600; }
+  .velocity-row .ctl { min-width: 130px; }
+  .velocity-row select {
+    padding: 0.35rem; border-radius: 6px; background: #23252c; color: var(--fg);
+    border: 1px solid var(--panel-border); font-size: 0.85rem;
+  }
+  @media (prefers-color-scheme: light) { .velocity-row select { background: #eceef2; } }
+  .pop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 0.5rem;
+  }
+  .creature { text-align: center; }
+  .creature canvas { display: block; margin: 0 auto; }
+  .creature .cap { font-size: 0.62rem; color: var(--muted); margin-top: 0.15rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+  .legend { display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.78rem; color: var(--muted); margin-top: 0.8rem; }
+  .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 0.35rem; vertical-align: middle; }
+  .charts-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .charts-row > .panel { flex: 1 1 280px; }
+  canvas.chart { width: 100%; height: 130px; display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Genome</h1>
+    <p>
+      A minimal evolutionary sanity check. A population of rhythm-creatures — each just the
+      tuple <code>(k, n, phase)</code> of a Euclidean rhythm — gets scored by how well it lines up
+      with the world's own rhythm, then the fittest breed with crossover and mutation. Watch the
+      population's genomes and sound converge on the world's groove over generations. No energy
+      economy, no death, no player yet — selection here is automatic.
+    </p>
+  </header>
+
+  <div class="row">
+    <div class="panel" style="flex: 1 1 380px;">
+      <h2>World (the selection pressure)</h2>
+      <div class="world-necklace-wrap">
+        <canvas id="worldCanvas" width="160" height="160"></canvas>
+        <div>
+          <div class="necklace-caption" id="worldPatternLabel">E(5,16)</div>
+          <div class="controls-grid" style="margin-top:0.6rem; grid-template-columns: 1fr;">
+            <div class="ctl">
+              <label>World onsets (K) <span id="worldKVal">5</span></label>
+              <input type="range" id="worldK" min="1" max="15" value="5">
+            </div>
+            <div class="ctl">
+              <label>World cycle length (N) <span id="worldNVal">16</span></label>
+              <input type="range" id="worldN" min="4" max="16" value="16">
+            </div>
+            <div class="ctl">
+              <label>World rotation (phase) <span id="worldPhaseVal">0</span></label>
+              <input type="range" id="worldPhase" min="0" max="15" value="0">
+            </div>
+            <div class="ctl" style="flex-direction:row; align-items:center; gap:0.5rem;">
+              <label style="margin:0; white-space:nowrap;">Auto-drift K</label>
+              <button id="toggleDriftK" style="padding:0.2rem 0.55rem;">Off</button>
+            </div>
+            <div class="ctl" style="flex-direction:row; align-items:center; gap:0.5rem;">
+              <label style="margin:0; white-space:nowrap;">Auto-drift rotation</label>
+              <button id="toggleDriftPhase" style="padding:0.2rem 0.55rem;">Off</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="flex: 2 1 520px;">
+      <h2>Simulation</h2>
+      <div class="buttons">
+        <button id="btnPlay" class="primary">Play</button>
+        <button id="btnStep">Step 1 generation</button>
+        <button id="btnReset">Reset (reseed random)</button>
+      </div>
+      <div class="stat-line">
+        <span>Generation <b id="genCount">0</b></span>
+        <span>A best <b id="bestFit">–</b></span>
+        <span>A avg <b id="avgFit">–</b></span>
+        <span>A fertile <b id="fertileCount">–</b>/<span id="popSizeLabel">24</span></span>
+      </div>
+      <div class="stat-line">
+        <span>B best <b id="bestFitB">–</b></span>
+        <span>B avg <b id="avgFitB">–</b></span>
+        <span>B fertile <b id="fertileCountB">–</b>/24</span>
+      </div>
+      <div class="controls-grid">
+        <div class="ctl">
+          <label>Evolution speed <span id="speedVal">5</span></label>
+          <input type="range" id="speed" min="1" max="10" value="5">
+        </div>
+        <div class="ctl">
+          <label>Mutation rate <span id="mutVal">0.15</span></label>
+          <input type="range" id="mutRate" min="0" max="0.6" step="0.01" value="0.15">
+        </div>
+        <div class="ctl">
+          <label>Cull fraction <span id="cullVal">0.50</span></label>
+          <input type="range" id="cullFrac" min="0.1" max="0.9" step="0.05" value="0.5">
+        </div>
+        <div class="ctl">
+          <label>Tempo (BPM) <span id="tempoVal">110</span></label>
+          <input type="range" id="tempo" min="60" max="180" value="110">
+        </div>
+      </div>
+      <div class="audio-row">
+        <div class="voice-ctl">
+          <span class="dot" style="background:var(--world-color)"></span> World voice (kick)
+          <button id="muteWorld" style="padding:0.2rem 0.55rem;">Mute</button>
+          <button id="soloWorld" style="padding:0.2rem 0.55rem;">Solo</button>
+        </div>
+        <div class="voice-ctl">
+          <span class="dot" style="background:var(--accent)"></span> Population A voice (mid tom)
+          <button id="mutePop" style="padding:0.2rem 0.55rem;">Mute</button>
+          <button id="soloPop" style="padding:0.2rem 0.55rem;">Solo</button>
+        </div>
+        <div class="voice-ctl">
+          <span class="dot" style="background:#2dd4bf"></span> Population B voice (high tom)
+          <button id="mutePopB" style="padding:0.2rem 0.55rem;">Mute</button>
+          <button id="soloPopB" style="padding:0.2rem 0.55rem;">Solo</button>
+        </div>
+        <div class="voice-ctl">
+          <span class="dot" style="background:#5b9dff"></span> Metronome (hi-hat)
+          <button id="toggleMetro" style="padding:0.2rem 0.55rem;">Off</button>
+          <select id="metroDiv" style="padding:0.3rem; border-radius:6px; background:#23252c; color:var(--fg); border:1px solid var(--panel-border); font-size:0.8rem;">
+            <option value="1">Every 1/16</option>
+            <option value="2">Every 1/8</option>
+            <option value="4">Every 1/4</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:1rem;">
+    <h2>MIDI Out</h2>
+    <div class="buttons">
+      <button id="btnMidiEnable">Enable MIDI</button>
+    </div>
+    <div id="midiStatus" class="necklace-caption" style="margin-bottom:0.7rem;">Not connected.</div>
+    <div class="controls-grid">
+      <div class="ctl">
+        <label>Output device</label>
+        <select id="midiOutput" disabled style="padding:0.35rem; border-radius:6px; background:#23252c; color:var(--fg); border:1px solid var(--panel-border);">
+          <option>— none —</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>Channel <span id="midiChannelVal">10</span></label>
+        <input type="range" id="midiChannel" min="1" max="16" value="10">
+      </div>
+      <div class="ctl">
+        <label>Kick note (World) <span id="noteWorldVal">36</span></label>
+        <input type="range" id="noteWorld" min="0" max="127" value="36">
+      </div>
+      <div class="ctl">
+        <label>Mid tom note (Pop A) <span id="notePopVal">45</span></label>
+        <input type="range" id="notePop" min="0" max="127" value="45">
+      </div>
+      <div class="ctl">
+        <label>High tom note (Pop B) <span id="notePopBVal">50</span></label>
+        <input type="range" id="notePopB" min="0" max="127" value="50">
+      </div>
+      <div class="ctl">
+        <label>Hi-hat note (Metronome) <span id="noteMetroVal">42</span></label>
+        <input type="range" id="noteMetro" min="0" max="127" value="42">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:1rem;">
+    <h2>Velocity, Dynamics &amp; Swing</h2>
+    <p style="font-size:0.82rem; color:var(--muted); margin:-0.3rem 0 0.8rem;">
+      Level scales each voice's natural velocity (World's fixed accent, Population A/B's live density, Metronome's fixed tap).
+      Mode adds variation on top: <b>Jitter</b> = independent random wobble per hit. <b>Accent</b> = occasional loud pop at a fixed chance.
+      <b>Walk</b> = a slow, smoothly drifting offset that wanders between hits instead of resetting each time. Feeds both the internal
+      synths and MIDI velocity, so what you hear and what you send out always match. Swing delays each voice's off-beat 16th notes
+      independently — 0% is straight, 100% pushes the off-beat to a full triplet shuffle — so e.g. the hi-hat can swing while the kick stays locked.
+    </p>
+    <div class="velocity-row">
+      <span class="voice-label">World (kick)</span>
+      <div class="ctl"><label>Level <span id="levelWorldVal">100%</span></label><input type="range" id="levelWorld" min="0" max="100" value="100"></div>
+      <div class="ctl"><label>Mode</label>
+        <select id="modeWorld">
+          <option value="none">None</option>
+          <option value="jitter">Jitter</option>
+          <option value="accent">Accent</option>
+          <option value="walk">Walk</option>
+        </select>
+      </div>
+      <div class="ctl"><label>Amount <span id="amountWorldVal">0%</span></label><input type="range" id="amountWorld" min="0" max="100" value="0"></div>
+      <div class="ctl"><label>Swing <span id="swingWorldVal">0%</span></label><input type="range" id="swingWorld" min="0" max="100" value="0"></div>
+    </div>
+    <div class="velocity-row">
+      <span class="voice-label">Population A</span>
+      <div class="ctl"><label>Level <span id="levelPopAVal">100%</span></label><input type="range" id="levelPopA" min="0" max="100" value="100"></div>
+      <div class="ctl"><label>Mode</label>
+        <select id="modePopA">
+          <option value="none">None</option>
+          <option value="jitter">Jitter</option>
+          <option value="accent">Accent</option>
+          <option value="walk">Walk</option>
+        </select>
+      </div>
+      <div class="ctl"><label>Amount <span id="amountPopAVal">0%</span></label><input type="range" id="amountPopA" min="0" max="100" value="0"></div>
+      <div class="ctl"><label>Swing <span id="swingPopAVal">0%</span></label><input type="range" id="swingPopA" min="0" max="100" value="0"></div>
+    </div>
+    <div class="velocity-row">
+      <span class="voice-label">Population B</span>
+      <div class="ctl"><label>Level <span id="levelPopBVal">100%</span></label><input type="range" id="levelPopB" min="0" max="100" value="100"></div>
+      <div class="ctl"><label>Mode</label>
+        <select id="modePopB">
+          <option value="none">None</option>
+          <option value="jitter">Jitter</option>
+          <option value="accent">Accent</option>
+          <option value="walk">Walk</option>
+        </select>
+      </div>
+      <div class="ctl"><label>Amount <span id="amountPopBVal">0%</span></label><input type="range" id="amountPopB" min="0" max="100" value="0"></div>
+      <div class="ctl"><label>Swing <span id="swingPopBVal">0%</span></label><input type="range" id="swingPopB" min="0" max="100" value="0"></div>
+    </div>
+    <div class="velocity-row">
+      <span class="voice-label">Metronome</span>
+      <div class="ctl"><label>Level <span id="levelMetroVal">100%</span></label><input type="range" id="levelMetro" min="0" max="100" value="100"></div>
+      <div class="ctl"><label>Mode</label>
+        <select id="modeMetro">
+          <option value="none">None</option>
+          <option value="jitter">Jitter</option>
+          <option value="accent">Accent</option>
+          <option value="walk">Walk</option>
+        </select>
+      </div>
+      <div class="ctl"><label>Amount <span id="amountMetroVal">0%</span></label><input type="range" id="amountMetro" min="0" max="100" value="0"></div>
+      <div class="ctl"><label>Swing <span id="swingMetroVal">0%</span></label><input type="range" id="swingMetro" min="0" max="100" value="0"></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:1rem;">
+    <h2>Population A (24 creatures)</h2>
+    <div class="pop-grid" id="popGrid"></div>
+    <div class="legend">
+      <div><span class="swatch" style="background:var(--dot-empty)"></span>dull = low fitness → <span class="swatch" style="background:var(--accent)"></span>bright = high fitness</div>
+      <div><span class="swatch" style="border:2px solid var(--fertile); background:transparent;"></span>fertile ring = coprime(k,n) = 1</div>
+      <div><span class="swatch" style="border:2px dashed var(--infertile); background:transparent;"></span>infertile ring = gcd(k,n) &gt; 1</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:1rem;">
+    <h2>Population B (24 creatures)</h2>
+    <div class="pop-grid" id="popGridB"></div>
+    <div class="legend">
+      <div><span class="swatch" style="background:var(--dot-empty)"></span>dull = low fitness → <span class="swatch" style="background:#2dd4bf"></span>bright = high fitness</div>
+      <div><span class="swatch" style="border:2px solid var(--fertile); background:transparent;"></span>fertile ring = coprime(k,n) = 1</div>
+      <div><span class="swatch" style="border:2px dashed var(--infertile); background:transparent;"></span>infertile ring = gcd(k,n) &gt; 1</div>
+    </div>
+  </div>
+
+  <div class="charts-row">
+    <div class="panel">
+      <h2>Distribution of n (cycle length)</h2>
+      <canvas class="chart" id="histN"></canvas>
+      <div class="legend"><div><span class="swatch" style="background:#ffd23f"></span>A <span class="swatch" style="background:#2dd4bf"></span>B</div></div>
+    </div>
+    <div class="panel">
+      <h2>Distribution of k (onset count)</h2>
+      <canvas class="chart" id="histK"></canvas>
+      <div class="legend"><div><span class="swatch" style="background:#ffd23f"></span>A <span class="swatch" style="background:#2dd4bf"></span>B</div></div>
+    </div>
+    <div class="panel">
+      <h2>Fitness over generations</h2>
+      <canvas class="chart" id="fitChart"></canvas>
+      <div class="legend"><div><span class="swatch" style="background:#ffd23f"></span>A best <span class="swatch" style="background:#8a8256"></span>A avg <span class="swatch" style="background:#2dd4bf"></span>B best <span class="swatch" style="background:#3f8a80"></span>B avg</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   GENOME — evolutionary rhythm sanity check
+   Structured in sections so a later energy economy / player-breeder verb
+   could be bolted on without touching the core loop:
+     Utils -> Bjorklund -> World -> Creature -> Fitness -> Evolution
+     -> Audio -> Rendering -> Simulation loop -> UI wiring
+   ========================================================================= */
+
+/* ---------------------------- Utils ------------------------------------ */
+
+function gcd(a, b) {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b) { [a, b] = [b, a % b]; }
+  return a || 1;
+}
+function lcm(a, b) { return Math.abs(a * b) / gcd(a, b); }
+function randInt(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function wrap(v, n) { return ((v % n) + n) % n; }
+function choice(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* ---------------------------- Bjorklund ---------------------------------
+   E(k, n): places k onsets as evenly as possible across n steps.
+   This is the standard recursive Bjorklund construction: repeatedly divide
+   the "k onsets" group and the "n-k rests" group into the largest possible
+   number of matched pairs, nesting the remainder inside those pairs, until
+   the remainder group has 0 or 1 elements left (that's the Euclidean
+   algorithm for gcd(k, n-k), just run on groups of symbols instead of on
+   numbers). What's left over is the raw maximally-even necklace, but its
+   rotation is arbitrary (whichever onset the recursion happens to leave at
+   index 0). To get a stable, singular representative for a given (k,n) we
+   rotate the necklace so the onset with the LONGEST gap to its next onset
+   sits at step 0 — i.e. the pattern always starts right as the longest
+   silence ends. That convention is what makes E(3,8)=10010010,
+   E(5,8)=10110110 and E(2,5)=10010 all come out consistently.
+   ------------------------------------------------------------------------- */
+function bjorklundRaw(k, n) {
+  let pattern = [];
+  const counts = [];
+  const remainders = [k];
+  let divisor = n - k;
+  let level = 0;
+  while (true) {
+    counts.push(Math.floor(divisor / remainders[level]));
+    remainders.push(divisor % remainders[level]);
+    divisor = remainders[level];
+    level++;
+    if (remainders[level] <= 1) break;
+  }
+  counts.push(divisor);
+
+  function build(lvl) {
+    if (lvl === -1) pattern.push(0);
+    else if (lvl === -2) pattern.push(1);
+    else {
+      for (let i = 0; i < counts[lvl]; i++) build(lvl - 1);
+      if (remainders[lvl] !== 0) build(lvl - 2);
+    }
+  }
+  build(level);
+  return pattern;
+}
+
+function euclid(k, n) {
+  k = clamp(k, 0, n);
+  if (k <= 0) return new Array(n).fill(0);
+  if (k >= n) return new Array(n).fill(1);
+  const raw = bjorklundRaw(k, n);
+  const onsets = [];
+  for (let i = 0; i < n; i++) if (raw[i]) onsets.push(i);
+  let bestOnset = onsets[0], bestGap = -1;
+  for (let idx = 0; idx < onsets.length; idx++) {
+    const cur = onsets[idx];
+    const next = onsets[(idx + 1) % onsets.length];
+    const gap = ((next - cur + n) % n) || n;
+    if (gap > bestGap) { bestGap = gap; bestOnset = cur; }
+  }
+  const rotated = new Array(n);
+  for (let i = 0; i < n; i++) rotated[i] = raw[(i + bestOnset) % n];
+  return rotated;
+}
+
+// Sanity check on load (see console): E(3,8)=10010010, E(5,8)=10110110, E(2,5)=10010
+console.assert(euclid(3, 8).join("") === "10010010", "Bjorklund check E(3,8) failed");
+console.assert(euclid(5, 8).join("") === "10110110", "Bjorklund check E(5,8) failed");
+console.assert(euclid(2, 5).join("") === "10010", "Bjorklund check E(2,5) failed");
+
+// Apply a creature's phase (rotation offset) on top of its base E(k,n) pattern.
+function rotatePattern(base, phase) {
+  const n = base.length;
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) out[i] = base[(i + phase) % n];
+  return out;
+}
+
+/* ---------------------------- Constants --------------------------------- */
+
+const POP_SIZE = 24;
+const N_MIN = 4, N_MAX = 16;
+const FERTILE_BONUS = 1.08;   // small edge for coprime creatures, not overwhelming
+const WASTE_PENALTY = 0.5;    // fitness cost per action wasted on a foodless beat
+const WORLD_DRIFT_CHANCE = 0.04; // per-generation odds of nudging world.K by +/-1 when auto-drift is on
+
+/* ---------------------------- World -------------------------------------- */
+
+const world = { K: 5, N: 16, phase: 0, pattern: null };
+function rebuildWorld() {
+  world.K = clamp(world.K, 1, world.N - 1);
+  world.phase = wrap(world.phase, world.N);
+  world.pattern = rotatePattern(euclid(world.K, world.N), world.phase);
+}
+rebuildWorld();
+
+/* ---------------------------- Creature ------------------------------------ */
+
+function makeCreature(k, n, phase) {
+  n = clamp(Math.round(n), N_MIN, N_MAX);
+  k = clamp(Math.round(k), 1, n - 1);
+  phase = wrap(Math.round(phase), n);
+  const base = euclid(k, n);
+  const g = gcd(k, n);
+  return {
+    k, n, phase,
+    pattern: rotatePattern(base, phase),
+    gcd: g,
+    fertile: g === 1,
+    fitness: 0,
+  };
+}
+
+function randomCreature() {
+  const n = randInt(N_MIN, N_MAX);
+  const k = randInt(1, n - 1);
+  const phase = randInt(0, n - 1);
+  return makeCreature(k, n, phase);
+}
+
+/* ---------------------------- Fitness -------------------------------------
+   A creature and the world tick at different cycle lengths (n vs world.N),
+   so to compare them fairly we need a window that is a whole number of
+   cycles for BOTH of them at once — the smallest such window is
+   L = lcm(creature.n, world.N). Stepping through anything shorter would
+   unfairly cut one of the two cycles mid-way; stepping through more than
+   one L would just repeat the same comparison redundantly.
+   Within that window: a "hit" is a beat where the creature acts AND the
+   world has food there (good — this is what selection rewards). A "wasted"
+   beat is where the creature acts but the world has nothing (bad — acting
+   costs something even when nothing comes of it, so pure high-density
+   genomes don't trivially dominate). Coprime (fertile) creatures get a
+   small multiplicative edge since they're the ones that can actually
+   contribute unique offspring patterns.
+   ---------------------------------------------------------------------- */
+function scoreFitness(creature) {
+  const L = lcm(creature.n, world.N);
+  let hits = 0, wasted = 0;
+  for (let s = 0; s < L; s++) {
+    const cOn = creature.pattern[s % creature.n];
+    const wOn = world.pattern[s % world.N];
+    if (cOn && wOn) hits++;
+    else if (cOn && !wOn) wasted++;
+  }
+  let fitness = hits - WASTE_PENALTY * wasted;
+  if (creature.fertile) fitness *= FERTILE_BONUS;
+  return fitness;
+}
+
+function scorePopulation(pop) {
+  for (const c of pop) c.fitness = scoreFitness(c);
+}
+
+/* ---------------------------- Evolution ------------------------------------
+   Each generation: score everyone against the world, sort by fitness, keep
+   the top (1 - cullFraction) as survivors untouched, then refill the rest
+   of the fixed-size population by breeding random pairs of survivors
+   (fitter survivors are drawn slightly more often via rank-weighting).
+   ---------------------------------------------------------------------- */
+
+// Pick a survivor with probability weighted toward the fitter (earlier) end
+// of the already fitness-sorted survivors array.
+function weightedPick(survivors) {
+  const m = survivors.length;
+  let total = 0;
+  const weights = survivors.map((_, i) => { const w = m - i; total += w; return w; });
+  let r = Math.random() * total;
+  for (let i = 0; i < m; i++) {
+    r -= weights[i];
+    if (r <= 0) return survivors[i];
+  }
+  return survivors[m - 1];
+}
+
+// CROSSOVER: each gene independently inherited from parent A, parent B, or
+// blended (midpoint, rounded) — a per-gene coin flip between the three.
+function crossover(a, b) {
+  function gene(ga, gb) {
+    const r = Math.random();
+    if (r < 1 / 3) return ga;
+    if (r < 2 / 3) return gb;
+    return Math.round((ga + gb) / 2);
+  }
+  return {
+    k: gene(a.k, b.k),
+    n: gene(a.n, b.n),
+    phase: gene(a.phase, b.phase),
+  };
+}
+
+// MUTATION: independently nudge each gene by +/-1 with probability `rate`.
+// Note: a +/-1 nudge to n (or k) can change gcd(k,n) from 1 to >1 or back —
+// flipping a lineage between fertile and infertile in a single generation.
+// That's not a bug to guard against, it's the point: fertility is a live,
+// audible/visible consequence of mutation, not a fixed trait.
+function mutate(genes, rate) {
+  let { k, n, phase } = genes;
+  if (Math.random() < rate) n += choice([-1, 1]);
+  if (Math.random() < rate) k += choice([-1, 1]);
+  if (Math.random() < rate) phase += choice([-1, 1]);
+  return { k, n, phase };
+}
+
+function breedChild(parentA, parentB, mutationRate) {
+  const genes = mutate(crossover(parentA, parentB), mutationRate);
+  // Clamp back to a valid genome: n in range, 1 <= k < n, phase wraps mod n.
+  const n = clamp(genes.n, N_MIN, N_MAX);
+  const k = clamp(genes.k, 1, n - 1);
+  const phase = wrap(genes.phase, n);
+  return makeCreature(k, n, phase);
+}
+
+function nextGeneration(pop, cullFraction, mutationRate) {
+  scorePopulation(pop);
+  const sorted = pop.slice().sort((a, b) => b.fitness - a.fitness);
+  const survivorCount = Math.max(2, Math.round(POP_SIZE * (1 - cullFraction)));
+  const survivors = sorted.slice(0, survivorCount);
+  const next = survivors.slice();
+  while (next.length < POP_SIZE) {
+    const pa = weightedPick(survivors);
+    let pb = weightedPick(survivors);
+    if (pb === pa && survivors.length > 1) pb = weightedPick(survivors);
+    next.push(breedChild(pa, pb, mutationRate));
+  }
+  scorePopulation(next);
+  return next;
+}
+
+/* ---------------------------- Sim state ------------------------------------ */
+
+const state = {
+  pop: [],
+  popB: [],
+  generation: 0,
+  playing: false,
+  genTimer: null,
+  bestHistory: [],
+  avgHistory: [],
+  bestHistoryB: [],
+  avgHistoryB: [],
+  mutationRate: 0.15,
+  cullFraction: 0.5,
+  speed: 5,
+  driftK: false,
+  driftPhase: false,
+};
+
+function resetSimulation() {
+  state.pop = Array.from({ length: POP_SIZE }, randomCreature);
+  state.popB = Array.from({ length: POP_SIZE }, randomCreature);
+  scorePopulation(state.pop);
+  scorePopulation(state.popB);
+  state.generation = 0;
+  state.bestHistory = [];
+  state.avgHistory = [];
+  state.bestHistoryB = [];
+  state.avgHistoryB = [];
+  recordHistory();
+  renderAll();
+}
+
+function recordHistory() {
+  function summarize(pop) {
+    const fits = pop.map(c => c.fitness);
+    return { best: Math.max(...fits), avg: fits.reduce((a, b) => a + b, 0) / fits.length };
+  }
+  const a = summarize(state.pop);
+  state.bestHistory.push(a.best);
+  state.avgHistory.push(a.avg);
+  if (state.bestHistory.length > 300) { state.bestHistory.shift(); state.avgHistory.shift(); }
+
+  const b = summarize(state.popB);
+  state.bestHistoryB.push(b.best);
+  state.avgHistoryB.push(b.avg);
+  if (state.bestHistoryB.length > 300) { state.bestHistoryB.shift(); state.avgHistoryB.shift(); }
+}
+
+function stepGeneration() {
+  // Population A and B evolve independently (separate gene pools, separate
+  // random breeding draws) but share the same generation clock, mutation
+  // rate, cull fraction, and — crucially — the same world to converge on.
+  // Since they start from different random seeds, they can land on
+  // different (but comparably fit) solutions to the same target: e.g. one
+  // exact-matching the world's pattern, the other its phase-shifted twin.
+  state.pop = nextGeneration(state.pop, state.cullFraction, state.mutationRate);
+  state.popB = nextGeneration(state.popB, state.cullFraction, state.mutationRate);
+  state.generation++;
+  maybeDriftWorld();
+  recordHistory();
+  renderAll();
+}
+
+// Keeps the population perpetually adapting instead of settling into
+// permanent stasis once it converges: occasionally nudges the world's onset
+// count by +/-1, moving the selection target instead of the genomes. This
+// re-triggers the same chaos-to-lock-in chase every time it fires, rather
+// than as a one-off event, without touching evolution/fitness logic at all.
+function maybeDriftWorld() {
+  if (state.driftK && Math.random() < WORLD_DRIFT_CHANCE) {
+    world.K = clamp(world.K + choice([-1, 1]), 1, world.N - 1);
+    rebuildWorld();
+    syncWorldKSlider();
+  }
+  // Rotation drift is a different axis from K-drift: it doesn't change how
+  // much the population needs to act, only WHEN. Rotating the world by +/-1
+  // is mathematically identical to every creature's own optimal phase
+  // shifting by the same amount (verified: brute-forcing the fitness
+  // landscape at several rotations gives the exact same best (k,n) pairs
+  // and fitness values every time — only the winning phase moves) — so a
+  // converged population doesn't need new genomes, just to re-walk its
+  // phase gene back into lock, which mutation already does on its own.
+  if (state.driftPhase && Math.random() < WORLD_DRIFT_CHANCE) {
+    world.phase = wrap(world.phase + choice([-1, 1]), world.N);
+    rebuildWorld();
+    syncWorldPhaseSlider();
+  }
+}
+
+function syncWorldKSlider() {
+  document.getElementById("worldK").value = world.K;
+  document.getElementById("worldKVal").textContent = world.K;
+}
+
+function syncWorldPhaseSlider() {
+  document.getElementById("worldPhase").value = world.phase;
+  document.getElementById("worldPhaseVal").textContent = world.phase;
+}
+
+/* ---------------------------- Audio ---------------------------------------- */
+
+let audioReady = false;
+let worldVol, popVol, popBVol, metroVol, worldSynth, popSynth, popBSynth, metroSynth, loopId = null;
+let globalStep = 0;
+const audio = {
+  worldMuted: false, worldSolo: false,
+  popMuted: false, popSolo: false,
+  popBMuted: false, popBSolo: false,
+  metroOn: false,
+  metroDiv: 1, // fires every `metroDiv` 16th-note steps: 1 = 1/16, 2 = 1/8, 4 = 1/4
+};
+
+function initAudio() {
+  if (audioReady) return;
+  worldVol = new Tone.Volume(0).toDestination();
+  popVol = new Tone.Volume(-8).toDestination();
+  popBVol = new Tone.Volume(-8).toDestination();
+  metroVol = new Tone.Volume(-16).toDestination();
+  // All three converging voices are MembraneSynths — a pitched drum synth
+  // (sine oscillator + a fast downward pitch envelope, the same mechanism
+  // real kick/tom synthesis uses), each tuned to a different drum in the
+  // same small kit. Deliberately NOT Tone.Noise/MetalSynth/NoiseSynth/
+  // PluckSynth: those noise-source instruments produce no audible output on
+  // some Tone.js/browser combinations, which silently broke these voices
+  // the first time around — MembraneSynth has no noise component and is
+  // proven to work here.
+  // World = kick: lowest, longest pitch sweep, the anchor of the kit.
+  worldSynth = new Tone.MembraneSynth({
+    pitchDecay: 0.01, octaves: 3,
+    envelope: { attack: 0.001, decay: 0.28, sustain: 0 },
+  }).connect(worldVol);
+  // Population A = mid tom: higher pitch, wider pitch sweep for more
+  // "boing," meant to sound like chaotic static early on, then thin out to
+  // a tight hit locked with the kick.
+  popSynth = new Tone.MembraneSynth({
+    pitchDecay: 0.035, octaves: 5,
+    envelope: { attack: 0.001, decay: 0.16, sustain: 0 },
+  }).connect(popVol);
+  // Population B = high tom: higher still, snappier/shorter sweep, so A and
+  // B stay tellable apart by ear as they each converge independently.
+  popBSynth = new Tone.MembraneSynth({
+    pitchDecay: 0.012, octaves: 2.5,
+    envelope: { attack: 0.001, decay: 0.1, sustain: 0 },
+  }).connect(popBVol);
+  // Metronome = hi-hat: a fixed E(16,16) "every step" click, independent of
+  // the world/population evolution. A plain high triangle tick is the
+  // closest a noise-free oscillator gets to a soft closed hi-hat here.
+  metroSynth = new Tone.Synth({
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.02 },
+  }).connect(metroVol);
+  applyAudioMix();
+  audioReady = true;
+}
+
+// Standard N-channel mixer solo behavior: if ANY of these three voices is
+// soloed, mute every voice except the soloed one(s); otherwise each voice
+// just respects its own mute flag. The metronome sits outside this scheme
+// on purpose — it's a fixed utility click, not one of the voices being
+// compared against each other.
+function applyAudioMix() {
+  if (!audioReady) return;
+  const voices = [
+    { vol: worldVol, muted: audio.worldMuted, solo: audio.worldSolo },
+    { vol: popVol, muted: audio.popMuted, solo: audio.popSolo },
+    { vol: popBVol, muted: audio.popBMuted, solo: audio.popBSolo },
+  ];
+  const anySolo = voices.some(v => v.solo);
+  for (const v of voices) v.vol.mute = anySolo ? !v.solo : v.muted;
+}
+
+/* ---------------------------- Velocity & Dynamics ---------------------------
+   Turns each voice's "natural" velocity (World's fixed accent, Population
+   A/B's live density, Metronome's fixed tap) into what actually gets played,
+   via a per-voice level (a plain scalar — the "channel volume" half of this)
+   and one of three optional variation modes layered on top:
+     - jitter: independent random +/- wobble each hit (choppy, unpredictable)
+     - accent: normally at `level`, but occasionally (chance = amount) pops
+       to a fixed louder accent — categorical rather than continuous
+     - walk:   a bounded random walk that drifts smoothly between hits
+       instead of resetting, so dynamics swell and dip organically
+   Computed ONCE per hit and reused for both the internal Tone synth and the
+   MIDI velocity byte, so what you hear and what you send out never diverge.
+   ---------------------------------------------------------------------- */
+
+const voiceVel = {
+  world: { level: 1, mode: "none", amount: 0, walk: 0 },
+  popA: { level: 1, mode: "none", amount: 0, walk: 0 },
+  popB: { level: 1, mode: "none", amount: 0, walk: 0 },
+  metro: { level: 1, mode: "none", amount: 0, walk: 0 },
+};
+
+function computeVelocity(voiceKey, natural) {
+  const cfg = voiceVel[voiceKey];
+  let v = natural * cfg.level;
+  if (cfg.mode === "jitter") {
+    v += (Math.random() * 2 - 1) * cfg.amount;
+  } else if (cfg.mode === "accent") {
+    if (Math.random() < cfg.amount) v = Math.min(1, cfg.level * 1.4);
+  } else if (cfg.mode === "walk") {
+    cfg.walk = clamp(cfg.walk + (Math.random() * 2 - 1) * 0.15, -cfg.amount, cfg.amount);
+    v += cfg.walk;
+  }
+  return clamp(v, 0.02, 1);
+}
+
+// Swing, per voice: delays the "off" 16th notes (odd globalStep — the "e"
+// and "a" of "1 e & a") while leaving the "on" 16ths untouched, so the
+// off-beat drifts from sitting exactly halfway between two on-beats (no
+// swing) toward two-thirds of the way there at full swing — the classic
+// swung-eighth-note-triplet feel, just parametrized as a plain 0-100%
+// amount. Independent per voice and applied as a pure time offset on top of
+// Tone's own scheduled `time`, so it never touches globalStep, the
+// Euclidean pattern math, or fitness — purely an audio/MIDI timing layer.
+// The metronome's own subdivision (every 1/16, 1/8, or 1/4) changes what
+// "off-beat" means for IT specifically: at 1/8 the swung click is every
+// other 8th note, not every other 16th step, and the max delay scales with
+// its own click spacing, not the raw 16th-note grid. World/PopA/PopB always
+// tick every 16th step (div=1), so their math is unchanged.
+const voiceSwing = { world: 0, popA: 0, popB: 0, metro: 0 };
+function swingDelay(voiceKey) {
+  const div = voiceKey === "metro" ? audio.metroDiv : 1;
+  const hitIndex = globalStep / div;
+  if (hitIndex % 2 === 0) return 0;
+  const sixteenthDur = Tone.Time("16n").toSeconds();
+  return voiceSwing[voiceKey] * (div * sixteenthDur / 3);
+}
+
+function audioTick(time) {
+  const wN = world.N;
+  const wOn = world.pattern[globalStep % wN];
+  const worldTime = time + swingDelay("world");
+  if (wOn) {
+    const v = computeVelocity("world", 1);
+    worldSynth.triggerAttackRelease("C2", "16n", worldTime, v);
+    sendMidiHit(midi.notes.world, v, worldTime);
+  }
+
+  let acting = 0;
+  for (const c of state.pop) if (c.pattern[globalStep % c.n]) acting++;
+  const density = acting / state.pop.length;
+  // Gate the population's voice PROBABILISTICALLY on density rather than
+  // triggering whenever density > 0. With 24 independent creatures, some
+  // creature is acting on almost every beat regardless of how converged the
+  // population is — a plain >0 gate would sound like a fixed click on every
+  // beat throughout the whole run, evolution audible only as a volume
+  // change. Sampling instead means a converged population (density exactly
+  // 1 on the world's onsets, exactly 0 elsewhere) becomes DETERMINISTIC —
+  // sounding only alongside the world and silent elsewhere — while an
+  // unconverged population scatters unpredictably across beats, which is
+  // what actually reads as "noise" against the world's steady reference.
+  if (Math.random() < density) {
+    const v = computeVelocity("popA", density);
+    const t = time + swingDelay("popA");
+    popSynth.triggerAttackRelease("G3", "32n", t, v);
+    sendMidiHit(midi.notes.popA, v, t);
+  }
+
+  let actingB = 0;
+  for (const c of state.popB) if (c.pattern[globalStep % c.n]) actingB++;
+  const densityB = actingB / state.popB.length;
+  if (Math.random() < densityB) {
+    const v = computeVelocity("popB", densityB);
+    const t = time + swingDelay("popB");
+    popBSynth.triggerAttackRelease("C5", "16n", t, v);
+    sendMidiHit(midi.notes.popB, v, t);
+  }
+
+  if (audio.metroOn && globalStep % audio.metroDiv === 0) {
+    const v = computeVelocity("metro", 0.4);
+    const t = time + swingDelay("metro");
+    metroSynth.triggerAttackRelease("A6", "64n", t, v);
+    sendMidiHit(midi.notes.metro, v, t);
+  }
+
+  const step = globalStep;
+  Tone.Draw.schedule(() => { highlightWorldStep(step % wN); }, worldTime);
+  globalStep++;
+}
+
+function startAudio() {
+  initAudio();
+  Tone.Transport.bpm.value = state.tempo || 110;
+  if (loopId === null) {
+    loopId = Tone.Transport.scheduleRepeat(audioTick, "16n");
+  }
+  Tone.Transport.start();
+}
+function stopAudio() {
+  Tone.Transport.stop();
+}
+
+/* ---------------------------- MIDI Out --------------------------------------
+   Sends the same four trigger events that drive the internal drum synths out
+   as MIDI notes too, so this instrument can play an external
+   sampler/hardware instead of (or alongside) its built-in sound. Additive by
+   design: enabling MIDI never silences the internal synths — mute those
+   separately via the existing voice Mute buttons if only the external
+   sampler should sound. Note numbers and channel are independently
+   configurable per voice/globally, not hardcoded to any convention (General
+   MIDI drum-map numbers are just the sliders' default starting point).
+   ---------------------------------------------------------------------- */
+
+const midi = {
+  access: null,
+  output: null,
+  channel: 9, // 0-indexed internally; the UI shows channel 10 (1-indexed)
+  notes: { world: 36, popA: 45, popB: 50, metro: 42 },
+};
+
+function midiStatusText(msg) {
+  document.getElementById("midiStatus").textContent = msg;
+}
+
+async function enableMidi() {
+  if (!navigator.requestMIDIAccess) {
+    midiStatusText("Web MIDI not supported in this browser — try Chrome or Edge.");
+    return;
+  }
+  try {
+    midi.access = await navigator.requestMIDIAccess({ sysex: false });
+    midi.access.onstatechange = populateMidiOutputs;
+    populateMidiOutputs();
+  } catch (err) {
+    midiStatusText("MIDI access denied or failed: " + err.message);
+  }
+}
+
+function populateMidiOutputs() {
+  const select = document.getElementById("midiOutput");
+  const previous = select.value;
+  select.innerHTML = "";
+  if (!midi.access || midi.access.outputs.size === 0) {
+    select.innerHTML = "<option>— none —</option>";
+    select.disabled = true;
+    midi.output = null;
+    midiStatusText("Connected, but no MIDI outputs found — check your virtual bus or sampler is visible to the OS.");
+    return;
+  }
+  for (const output of midi.access.outputs.values()) {
+    const opt = document.createElement("option");
+    opt.value = output.id;
+    opt.textContent = output.name;
+    select.appendChild(opt);
+  }
+  select.disabled = false;
+  const stillPresent = [...midi.access.outputs.values()].some(o => o.id === previous);
+  select.value = stillPresent ? previous : select.options[0].value;
+  midi.output = midi.access.outputs.get(select.value);
+  midiStatusText(`Connected — sending to "${midi.output.name}".`);
+}
+
+// Sends a short MIDI note (note-on now, note-off ~60ms later) for one voice
+// hit, timed via Tone.Draw so it lands close to the same real-world moment
+// as the audio trigger it accompanies (Tone's `time` is an AudioContext
+// timestamp, not wall-clock time — Tone.Draw bridges the two, same
+// mechanism already used to sync the world-necklace beat highlight).
+function sendMidiHit(note, velocity01, time) {
+  if (!midi.output) return;
+  const velocity = Math.max(1, Math.round(clamp(velocity01, 0, 1) * 127));
+  const channel = midi.channel;
+  const out = midi.output;
+  Tone.Draw.schedule(() => {
+    out.send([0x90 | channel, note, velocity]);
+    setTimeout(() => out.send([0x80 | channel, note, 0]), 60);
+  }, time);
+}
+
+/* ---------------------------- Rendering ------------------------------------ */
+
+const els = {
+  worldCanvas: document.getElementById("worldCanvas"),
+  popGrid: document.getElementById("popGrid"),
+  popGridB: document.getElementById("popGridB"),
+  histN: document.getElementById("histN"),
+  histK: document.getElementById("histK"),
+  fitChart: document.getElementById("fitChart"),
+  worldPatternLabel: document.getElementById("worldPatternLabel"),
+  genCount: document.getElementById("genCount"),
+  bestFit: document.getElementById("bestFit"),
+  avgFit: document.getElementById("avgFit"),
+  fertileCount: document.getElementById("fertileCount"),
+  bestFitB: document.getElementById("bestFitB"),
+  avgFitB: document.getElementById("avgFitB"),
+  fertileCountB: document.getElementById("fertileCountB"),
+};
+
+let currentWorldHighlight = -1;
+function highlightWorldStep(stepIdx) {
+  currentWorldHighlight = stepIdx;
+  drawWorldNecklace();
+}
+
+function lerpColor(t, a, b) {
+  t = clamp(t, 0, 1);
+  const c1 = a.match(/\w\w/g).map(h => parseInt(h, 16));
+  const c2 = b.match(/\w\w/g).map(h => parseInt(h, 16));
+  const c = c1.map((v, i) => Math.round(v + (c2[i] - v) * t));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+function drawNecklace(canvas, n, pattern, opts) {
+  const ctx = canvas.getContext("2d");
+  const size = canvas.width;
+  ctx.clearRect(0, 0, size, size);
+  const cx = size / 2, cy = size / 2, r = size * 0.36;
+  const dotR = Math.max(2.2, size * 0.05);
+  for (let i = 0; i < n; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    const x = cx + r * Math.cos(angle), y = cy + r * Math.sin(angle);
+    ctx.beginPath();
+    ctx.arc(x, y, dotR, 0, 2 * Math.PI);
+    ctx.fillStyle = pattern[i] ? opts.filled : opts.empty;
+    ctx.fill();
+    if (opts.highlight === i) {
+      ctx.beginPath();
+      ctx.arc(x, y, dotR + 3, 0, 2 * Math.PI);
+      ctx.strokeStyle = opts.filled;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+  if (opts.ring) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.strokeStyle = opts.ring;
+    ctx.lineWidth = 1.4;
+    if (opts.ringDashed) ctx.setLineDash([3, 3]); else ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawWorldNecklace() {
+  drawNecklace(els.worldCanvas, world.N, world.pattern, {
+    filled: "#ff6b5b", empty: getCss("--dot-empty"), highlight: currentWorldHighlight,
+  });
+  els.worldPatternLabel.textContent = `E(${world.K},${world.N}) rot ${world.phase} = ${world.pattern.join("")}`;
+}
+
+function getCss(varName) {
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+}
+
+// Renders one population's necklace grid into `gridEl`, tinted dull->bright
+// using `brightColor`, and writes its best/avg/fertile stats into the given
+// DOM elements. Shared by population A and population B so both stay in
+// sync with any future tweaks to the visualization.
+function renderPopulationInto(pop, gridEl, brightColor, statEls) {
+  const fits = pop.map(c => c.fitness);
+  const min = Math.min(...fits), max = Math.max(...fits);
+  const span = (max - min) || 1;
+  const dull = "#3a3d47";
+
+  if (gridEl.childElementCount !== pop.length) {
+    gridEl.innerHTML = "";
+    for (let i = 0; i < pop.length; i++) {
+      const div = document.createElement("div");
+      div.className = "creature";
+      div.innerHTML = `<canvas width="64" height="64"></canvas><div class="cap"></div>`;
+      gridEl.appendChild(div);
+    }
+  }
+
+  pop.forEach((c, i) => {
+    const cell = gridEl.children[i];
+    const canvas = cell.querySelector("canvas");
+    const t = (c.fitness - min) / span;
+    const color = lerpColor(t, dull, brightColor);
+    drawNecklace(canvas, c.n, c.pattern, {
+      filled: color, empty: getCss("--dot-empty"),
+      ring: c.fertile ? "#4fd67a" : "#ff6b5b",
+      ringDashed: !c.fertile,
+    });
+    const cap = cell.querySelector(".cap");
+    cap.textContent = `n${c.n} k${c.k} φ${c.phase}` + (c.fertile ? "" : ` gcd${c.gcd}`);
+  });
+
+  const fertileCount = pop.filter(c => c.fertile).length;
+  if (statEls.fertileCount) statEls.fertileCount.textContent = fertileCount;
+  if (statEls.bestFit) statEls.bestFit.textContent = max.toFixed(2);
+  if (statEls.avgFit) statEls.avgFit.textContent = (fits.reduce((a, b) => a + b, 0) / fits.length).toFixed(2);
+}
+
+function renderPopulation() {
+  renderPopulationInto(state.pop, els.popGrid, "#ffd23f", {
+    fertileCount: els.fertileCount, bestFit: els.bestFit, avgFit: els.avgFit,
+  });
+  els.genCount.textContent = state.generation;
+  renderPopulationInto(state.popB, els.popGridB, "#2dd4bf", {
+    fertileCount: els.fertileCountB, bestFit: els.bestFitB, avgFit: els.avgFitB,
+  });
+}
+
+// Draws grouped bars: countsA/countsB side by side per bin, so population
+// A's and B's distributions stay directly comparable at a glance.
+function drawBarChart(canvas, countsA, countsB, labels) {
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 260, h = canvas.clientHeight || 130;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const maxCount = Math.max(1, ...countsA, ...countsB);
+  const binW = w / countsA.length;
+  const barW = Math.max(1, binW / 2 - 1.5);
+  countsA.forEach((count, i) => {
+    const bh = (count / maxCount) * (h - 18);
+    ctx.fillStyle = "#ffd23f";
+    ctx.fillRect(i * binW + 1, h - 18 - bh, barW, bh);
+    const bhB = (countsB[i] / maxCount) * (h - 18);
+    ctx.fillStyle = "#2dd4bf";
+    ctx.fillRect(i * binW + 1 + barW + 1, h - 18 - bhB, barW, bhB);
+  });
+  ctx.fillStyle = getCss("--muted") || "#888";
+  ctx.font = "9px sans-serif";
+  ctx.textAlign = "center";
+  labels.forEach((lab, i) => {
+    if (i % Math.ceil(labels.length / 14) === 0) {
+      ctx.fillText(lab, i * binW + binW / 2, h - 5);
+    }
+  });
+}
+
+function renderHistograms() {
+  const nCounts = new Array(N_MAX - N_MIN + 1).fill(0);
+  const nCountsB = new Array(N_MAX - N_MIN + 1).fill(0);
+  const nLabels = [];
+  for (let n = N_MIN; n <= N_MAX; n++) nLabels.push(String(n));
+  state.pop.forEach(c => nCounts[c.n - N_MIN]++);
+  state.popB.forEach(c => nCountsB[c.n - N_MIN]++);
+  drawBarChart(els.histN, nCounts, nCountsB, nLabels);
+
+  const kMax = N_MAX - 1;
+  const kCounts = new Array(kMax).fill(0);
+  const kCountsB = new Array(kMax).fill(0);
+  const kLabels = [];
+  for (let k = 1; k <= kMax; k++) kLabels.push(String(k));
+  state.pop.forEach(c => { if (c.k - 1 < kCounts.length) kCounts[c.k - 1]++; });
+  state.popB.forEach(c => { if (c.k - 1 < kCountsB.length) kCountsB[c.k - 1]++; });
+  drawBarChart(els.histK, kCounts, kCountsB, kLabels);
+}
+
+function renderFitnessChart() {
+  const canvas = els.fitChart;
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 260, h = canvas.clientHeight || 130;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const best = state.bestHistory, avg = state.avgHistory;
+  const bestB = state.bestHistoryB, avgB = state.avgHistoryB;
+  if (best.length < 2) return;
+  const allVals = best.concat(avg, bestB, avgB);
+  const maxV = Math.max(...allVals, 1);
+  const minV = Math.min(...allVals, 0);
+  const span = (maxV - minV) || 1;
+  function plot(series, color) {
+    ctx.beginPath();
+    series.forEach((v, i) => {
+      const x = (i / (series.length - 1)) * w;
+      const y = h - ((v - minV) / span) * (h - 8) - 4;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+  // A = yellow family, B = teal family; muted/dashed-feel shade for avg,
+  // full-strength for best, so all four lines stay tellable apart.
+  plot(avg, "#8a8256");
+  plot(best, "#ffd23f");
+  plot(avgB, "#3f8a80");
+  plot(bestB, "#2dd4bf");
+}
+
+function renderAll() {
+  drawWorldNecklace();
+  renderPopulation();
+  renderHistograms();
+  renderFitnessChart();
+}
+
+/* ---------------------------- Simulation loop ------------------------------ */
+
+function genIntervalMs(speed) { return Math.round(2200 - speed * 200); }
+
+function startLoop() {
+  if (state.genTimer) return;
+  state.genTimer = setInterval(stepGeneration, genIntervalMs(state.speed));
+}
+function stopLoop() {
+  clearInterval(state.genTimer);
+  state.genTimer = null;
+}
+
+function setPlaying(playing) {
+  state.playing = playing;
+  const btn = document.getElementById("btnPlay");
+  if (playing) {
+    Tone.start().then(startAudio);
+    startLoop();
+    btn.textContent = "Pause";
+    btn.classList.add("active");
+  } else {
+    stopAudio();
+    stopLoop();
+    btn.textContent = "Play";
+    btn.classList.remove("active");
+  }
+}
+
+/* ---------------------------- UI wiring ------------------------------------ */
+
+document.getElementById("btnPlay").addEventListener("click", () => setPlaying(!state.playing));
+document.getElementById("btnStep").addEventListener("click", stepGeneration);
+document.getElementById("btnReset").addEventListener("click", resetSimulation);
+
+function bindSlider(id, valId, onChange, fmt = v => v) {
+  const el = document.getElementById(id);
+  const valEl = document.getElementById(valId);
+  el.addEventListener("input", () => {
+    const v = parseFloat(el.value);
+    valEl.textContent = fmt(v);
+    onChange(v);
+  });
+}
+
+function rescoreAndRender() {
+  rebuildWorld();
+  drawWorldNecklace();
+  scorePopulation(state.pop);
+  scorePopulation(state.popB);
+  renderPopulation();
+}
+bindSlider("worldK", "worldKVal", v => { world.K = v; rescoreAndRender(); }, v => v);
+bindSlider("worldN", "worldNVal", v => {
+  world.N = v;
+  document.getElementById("worldK").max = v - 1;
+  document.getElementById("worldPhase").max = v - 1;
+  if (world.K >= v) { world.K = v - 1; document.getElementById("worldK").value = world.K; document.getElementById("worldKVal").textContent = world.K; }
+  if (world.phase >= v) { world.phase = v - 1; document.getElementById("worldPhase").value = world.phase; document.getElementById("worldPhaseVal").textContent = world.phase; }
+  rescoreAndRender();
+}, v => v);
+bindSlider("worldPhase", "worldPhaseVal", v => { world.phase = v; rescoreAndRender(); }, v => v);
+bindSlider("speed", "speedVal", v => { state.speed = v; if (state.genTimer) { stopLoop(); startLoop(); } }, v => v);
+bindSlider("mutRate", "mutVal", v => { state.mutationRate = v; }, v => v.toFixed(2));
+bindSlider("cullFrac", "cullVal", v => { state.cullFraction = v; }, v => v.toFixed(2));
+bindSlider("tempo", "tempoVal", v => { state.tempo = v; if (audioReady) Tone.Transport.bpm.value = v; }, v => v);
+
+function toggleBtn(id, flagObj, flagKey, otherFlagKey) {
+  const btn = document.getElementById(id);
+  btn.addEventListener("click", () => {
+    flagObj[flagKey] = !flagObj[flagKey];
+    btn.classList.toggle("active", flagObj[flagKey]);
+    applyAudioMix();
+  });
+}
+toggleBtn("muteWorld", audio, "worldMuted");
+toggleBtn("soloWorld", audio, "worldSolo");
+toggleBtn("mutePop", audio, "popMuted");
+toggleBtn("soloPop", audio, "popSolo");
+toggleBtn("mutePopB", audio, "popBMuted");
+toggleBtn("soloPopB", audio, "popBSolo");
+document.getElementById("soloWorld").addEventListener("click", () => document.getElementById("soloWorld").classList.toggle("active", audio.worldSolo));
+document.getElementById("soloPop").addEventListener("click", () => document.getElementById("soloPop").classList.toggle("active", audio.popSolo));
+
+const toggleMetroBtn = document.getElementById("toggleMetro");
+toggleMetroBtn.addEventListener("click", () => {
+  audio.metroOn = !audio.metroOn;
+  toggleMetroBtn.textContent = audio.metroOn ? "On" : "Off";
+  toggleMetroBtn.classList.toggle("active", audio.metroOn);
+});
+document.getElementById("metroDiv").addEventListener("change", (e) => {
+  audio.metroDiv = parseInt(e.target.value, 10);
+});
+
+const toggleDriftKBtn = document.getElementById("toggleDriftK");
+toggleDriftKBtn.addEventListener("click", () => {
+  state.driftK = !state.driftK;
+  toggleDriftKBtn.textContent = state.driftK ? "On" : "Off";
+  toggleDriftKBtn.classList.toggle("active", state.driftK);
+});
+
+const toggleDriftPhaseBtn = document.getElementById("toggleDriftPhase");
+toggleDriftPhaseBtn.addEventListener("click", () => {
+  state.driftPhase = !state.driftPhase;
+  toggleDriftPhaseBtn.textContent = state.driftPhase ? "On" : "Off";
+  toggleDriftPhaseBtn.classList.toggle("active", state.driftPhase);
+});
+
+document.getElementById("btnMidiEnable").addEventListener("click", enableMidi);
+document.getElementById("midiOutput").addEventListener("change", (e) => {
+  midi.output = midi.access ? midi.access.outputs.get(e.target.value) : null;
+  if (midi.output) midiStatusText(`Connected — sending to "${midi.output.name}".`);
+});
+bindSlider("midiChannel", "midiChannelVal", v => { midi.channel = v - 1; }, v => v);
+bindSlider("noteWorld", "noteWorldVal", v => { midi.notes.world = v; }, v => v);
+bindSlider("notePop", "notePopVal", v => { midi.notes.popA = v; }, v => v);
+bindSlider("notePopB", "notePopBVal", v => { midi.notes.popB = v; }, v => v);
+bindSlider("noteMetro", "noteMetroVal", v => { midi.notes.metro = v; }, v => v);
+
+function bindVoiceVelocity(idSuffix, voiceKey) {
+  bindSlider(`level${idSuffix}`, `level${idSuffix}Val`, v => { voiceVel[voiceKey].level = v / 100; }, v => `${v}%`);
+  bindSlider(`amount${idSuffix}`, `amount${idSuffix}Val`, v => { voiceVel[voiceKey].amount = v / 100; }, v => `${v}%`);
+  bindSlider(`swing${idSuffix}`, `swing${idSuffix}Val`, v => { voiceSwing[voiceKey] = v / 100; }, v => `${v}%`);
+  document.getElementById(`mode${idSuffix}`).addEventListener("change", (e) => {
+    voiceVel[voiceKey].mode = e.target.value;
+    voiceVel[voiceKey].walk = 0;
+  });
+}
+bindVoiceVelocity("World", "world");
+bindVoiceVelocity("PopA", "popA");
+bindVoiceVelocity("PopB", "popB");
+bindVoiceVelocity("Metro", "metro");
+
+/* ---------------------------- Init ------------------------------------------ */
+
+state.tempo = 110;
+document.getElementById("worldK").max = world.N - 1;
+document.getElementById("worldPhase").max = world.N - 1;
+resetSimulation();
+window.addEventListener("resize", () => { renderHistograms(); renderFitnessChart(); });
+
+</script>
+</body>
+</html>
