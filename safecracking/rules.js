@@ -1,45 +1,48 @@
 /* SafeCracker — deterministic game rules.
  *
  * This module holds ONLY the pure game logic: the candidate pool, the seeded
- * secret pick, the action costs, the resource caps, and the resolution order
- * of every action. It touches neither the DOM nor the audio clock, so the
- * entire rules surface is testable in Node (see tests.js).
+ * secret pick, the listen schedule, the action costs, the resource caps, and
+ * the resolution order of every action. It touches neither the DOM nor the
+ * audio clock, so the entire rules surface is testable in Node (see tests.js).
  *
- * DESIGN (candidate pool + budgets)
- * ---------------------------------
- * The secret is always one of the 10 curated coprime pairs in POOL, all with
- * an onset on step 0 (the downbeat). The player controls k in [K_MIN..K_MAX]
- * and n in [N_MIN..N_MAX] and can act three ways:
+ * DESIGN (contact point)
+ * ----------------------
+ * The secret is a coprime Euclidean rhythm E(k, n) with an onset on step 0
+ * (the downbeat). The player sets a DIAL (k, n) and acts two ways:
  *
- *   Listen        -2 beats  +1 noise   you hear one full secret cycle
- *                                        (HEARD requires working audio; a
- *                                        listen that never plays charges nothing)
- *   Probe k / n   -4 beats  +2 noise   higher / lower / equal against the
- *                                        value currently entered on that axis.
- *                                        Limited to MAX_PROBES total.
+ *   Listen        -2 beats  +1 noise   plays the lock AND your dial together
+ *                                        for a fixed LISTEN_STEPS steps, both
+ *                                        looping from a shared downbeat.
+ *                                        (Requires working audio; a listen
+ *                                        that never plays charges nothing.)
  *   Try (k,n)     -1 beat   +3 noise   correct pair opens the lock; a wrong
  *                                        pair costs noise and tells you nothing
  *                                        but "still locked".
  *
- * The tradeoff is information vs risk:
- *   - Listening is the ONLY information-rich action and it is load-bearing by
- *     rule: probing requires having HEARD the lock first (you calibrate your
- *     pick to its acoustic signature). A player who never listens can never
- *     probe, so blind action-arithmetic cannot be a dominant strategy.
- *   - Probing (3 max) is a strong *verifier*: higher/lower/equal against the
- *     value you entered. With a known 10-pair pool it is powerful enough to
- *     confirm a hypothesis, but it costs more time than listening and, being
- *     gated behind a listen, can only ever refine what the ear started.
- *   - A wrong try costs a third of the noise budget, so you cannot enumerate
- *     the pool blindly — you get at most 2 survivable wrong tries.
+ * Why the dial overlay: a lone Euclidean cycle hides n — the trailing rests
+ * are silence with nothing to close them. Looping the lock against the dial
+ * makes n audible as PHASE DRIFT, like a safecracker listening for the
+ * contact point:
+ *   - dial n == lock n: your dial downbeat lands on the lock's downbeat every
+ *     cycle (they fuse). If k matches too, every hit fuses — full unison.
+ *   - dial n  > lock n: your downbeat falls (n_dial - n_lock) steps further
+ *     BEHIND the lock's each cycle.  -> turn n down.
+ *   - dial n  < lock n: it creeps AHEAD by the same amount.  -> turn n up.
+ *   - k is countable: lock hits between two lock downbeats.
+ * The drift direction is a higher/lower probe delivered by ear, so there is
+ * no separate probe action. Drift SIZE is the skilled-ear bonus: hearing
+ * "off by one" vs "way off" lets a good listener skip listens.
+ *
+ * The listen length is fixed (never a function of n), so its duration leaks
+ * nothing.
  *
  * RESOLUTION ORDER (consistent, tested in tests.js)
  * -----------------------------------------------
  * Charges are applied to every committed action. A CORRECT try wins BEFORE the
  * limit check, so the lock can legitimately "click open on the same beat the
  * guard would have caught you" — that exception only applies to the winning
- * attempt. A wrong try, listen, or probe that pushes noise to NOISE_LIMIT or
- * beats to GUARD_BEATS is a loss.
+ * attempt. A wrong try or a listen that pushes noise to NOISE_LIMIT or beats
+ * to GUARD_BEATS is a loss.
  */
 (function (root, factory) {
   const api = factory();
@@ -86,28 +89,27 @@
   // Parameters (single source of truth for the UI and the tests)
   // -------------------------------------------------------------------------
 
-  // Entered-value ranges. The secret is never outside them, but they are wider
-  // than the pool so probing is a genuine search, not a menu of the answer.
+  // Dial ranges. Every coprime pair inside them is a possible secret.
   const K_MIN = 2, K_MAX = 5;
   const N_MIN = 4, N_MAX = 12;
 
   // Resource caps. GUARD_BEATS = how many committed beats before the guard
   // arrives; NOISE_LIMIT = noise at which the alarm trips. Being at or past a
-  // cap on a non-winning action is a loss.
-  const GUARD_BEATS = 20;
+  // cap on a non-winning action is a loss. Tuned so a perfect ear (direction
+  // only) needs 2 listens + 1 try, leaving ~3 spare listens for real ears.
+  const GUARD_BEATS = 12;
   const NOISE_LIMIT = 9;
 
-  // Probing is the strong verifier; capping it stops "always probe both
-  // numbers" from dominating. 3 < the 4 probes it takes to pin k and n both.
-  const MAX_PROBES = 3;
-
-  // Tempo is FIXED for a challenge (and across challenges) so that timing
-  // comparisons between the secret and remembered rhythms stay meaningful.
+  // Tempo is FIXED for a challenge (and across challenges) so that drift
+  // heard on one listen is comparable to drift heard on the next.
   const TEMPO_BPM = 100;
+
+  // Steps per listen: 3 full cycles of the longest possible lock, so even at
+  // n = N_MAX the drift is heard growing twice. Independent of the secret.
+  const LISTEN_STEPS = 3 * N_MAX;
 
   const COSTS = Object.freeze({
     listen: Object.freeze({ beats: 2, noise: 1 }),
-    probe: Object.freeze({ beats: 4, noise: 2 }),
     try: Object.freeze({ beats: 1, noise: 3 }),
   });
 
@@ -116,20 +118,37 @@
     too_loud: 'too_loud',
   });
 
-  // Structurally: all pairs coprime so there is exactly one answer candidate
-  // per sound (no scale/phase ambiguity). Curated for ear-distinct spacing.
-  const POOL = Object.freeze([
-    Object.freeze({ k: 2, n: 5 }),
-    Object.freeze({ k: 2, n: 7 }),
-    Object.freeze({ k: 3, n: 4 }),
-    Object.freeze({ k: 3, n: 8 }),
-    Object.freeze({ k: 3, n: 10 }),
-    Object.freeze({ k: 4, n: 7 }),
-    Object.freeze({ k: 5, n: 7 }),
-    Object.freeze({ k: 5, n: 8 }),
-    Object.freeze({ k: 5, n: 9 }),
-    Object.freeze({ k: 5, n: 12 }),
-  ]);
+  // Every coprime pair in range: exactly one answer per sound (no scale/phase
+  // ambiguity), and wide enough that counting k alone never narrows the lock
+  // to something two wrong tries can cover.
+  const POOL = Object.freeze((function () {
+    const out = [];
+    for (let k = K_MIN; k <= K_MAX; k++) {
+      for (let n = Math.max(N_MIN, k + 1); n <= N_MAX; n++) {
+        if (gcd(k, n) === 1) out.push(Object.freeze({ k: k, n: n }));
+      }
+    }
+    return out;
+  })());
+
+  // -------------------------------------------------------------------------
+  // Listen schedule — what the ear gets. The UI plays exactly these events.
+  // -------------------------------------------------------------------------
+
+  /* Both rhythms loop from a shared step 0 for LISTEN_STEPS steps. Voices:
+   *   lockDownbeat / lockOnset  — the secret (kick / click)
+   *   dialDownbeat / dialOnset  — the player's dial (metal tick / soft tick) */
+  function listenSchedule(secret, dial) {
+    const lock = bjorklund(secret.k, secret.n);
+    const mine = bjorklund(dial.k, dial.n);
+    const events = [];
+    for (let s = 0; s < LISTEN_STEPS; s++) {
+      const li = s % lock.length, di = s % mine.length;
+      if (lock[li]) events.push({ step: s, voice: li === 0 ? 'lockDownbeat' : 'lockOnset' });
+      if (mine[di]) events.push({ step: s, voice: di === 0 ? 'dialDownbeat' : 'dialOnset' });
+    }
+    return events;
+  }
 
   // -------------------------------------------------------------------------
   // Seeded PRNG — reproducible secret selection.
@@ -192,9 +211,7 @@
       reason: null,                                      // LOSS_REASONS entry when lost
       beatsUsed: 0,
       noise: 0,
-      probesUsed: 0,
-      listenedCount: 0,                                   // heard listens (calibration)
-      k: clampK(opts.k !== undefined ? opts.k : 3),      // entered values (never charged)
+      k: clampK(opts.k !== undefined ? opts.k : 3),      // dial values (never charged)
       n: clampN(opts.n !== undefined ? opts.n : 8),
       attempts: [],                                      // previous tried pairs {k,n}
       history: [],                                       // committed-action log
@@ -203,17 +220,11 @@
 
   const guardRemaining = (r) => GUARD_BEATS - r.beatsUsed;
   const noiseRemaining = (r) => NOISE_LIMIT - r.noise;
-  const probesRemaining = (r) => MAX_PROBES - r.probesUsed;
   const isEnded = (r) => r.status !== 'active';
 
-  // Changing inputs is free — only committed actions advance the clock.
+  // Turning the dial is free — only committed actions advance the clock.
   function setK(run, v) { if (run.status === 'active') run.k = clampK(v); }
   function setN(run, v) { if (run.status === 'active') run.n = clampN(v); }
-
-  function compareEntered(entered, target) {
-    if (entered === target) return 'equal';
-    return entered < target ? 'higher' : 'lower';
-  }
 
   function pushHistory(run, entry) {
     run.history.push(Object.assign({ beats: 0, noise: 0 }, entry));
@@ -239,44 +250,21 @@
     return false;
   }
 
+  /* Records a listen against the current dial. The result carries no verdict —
+   * what the lock "said" is only in the audio (listenSchedule). */
   function listen(run, opts) {
     if (isEnded(run)) return { ok: false, reason: 'run_ended' };
     if (!opts || opts.heard !== true) return { ok: false, reason: 'audio_unavailable' };
     charge(run, COSTS.listen);
-    run.listenedCount += 1;
     pushHistory(run, {
       type: 'listen', label: 'Listen',
       beats: COSTS.listen.beats, noise: COSTS.listen.noise,
-      detail: 'Heard one full cycle.',
+      k: run.k, n: run.n,
     });
     const lost = failByLimits(run);
     return {
       ok: true, lost: lost, reason: lost ? run.reason : null,
       charged: COSTS.listen,
-      guardRemaining: guardRemaining(run), noiseRemaining: noiseRemaining(run),
-    };
-  }
-
-  function probe(run, axis) {
-    if (isEnded(run)) return { ok: false, reason: 'run_ended' };
-    if (run.listenedCount === 0) return { ok: false, reason: 'need_listen' };
-    if (axis !== 'k' && axis !== 'n') return { ok: false, reason: 'bad_axis' };
-    if (run.probesUsed >= MAX_PROBES) return { ok: false, reason: 'probe_limit' };
-
-    const value = run[axis];
-    const result = compareEntered(value, run.secret[axis]);
-    charge(run, COSTS.probe);
-    run.probesUsed += 1;
-    pushHistory(run, {
-      type: 'probe', axis: axis, label: 'Probe ' + axis,
-      beats: COSTS.probe.beats, noise: COSTS.probe.noise,
-      value: value, result: result,
-    });
-    const lost = failByLimits(run);
-    return {
-      ok: true, lost: lost, reason: lost ? run.reason : null,
-      axis: axis, value: value, result: result, probesUsed: run.probesUsed,
-      charged: COSTS.probe,
       guardRemaining: guardRemaining(run), noiseRemaining: noiseRemaining(run),
     };
   }
@@ -320,15 +308,16 @@
     bjorklund: bjorklund,
     gcd: gcd,
     K_MIN: K_MIN, K_MAX: K_MAX, N_MIN: N_MIN, N_MAX: N_MAX,
-    GUARD_BEATS: GUARD_BEATS, NOISE_LIMIT: NOISE_LIMIT, MAX_PROBES: MAX_PROBES,
-    TEMPO_BPM: TEMPO_BPM,
+    GUARD_BEATS: GUARD_BEATS, NOISE_LIMIT: NOISE_LIMIT,
+    TEMPO_BPM: TEMPO_BPM, LISTEN_STEPS: LISTEN_STEPS,
     COSTS: COSTS, POOL: POOL, LOSS_REASONS: LOSS_REASONS,
+    listenSchedule: listenSchedule,
     secretFromSeed: secretFromSeed, randomSeed: randomSeed,
     clampK: clampK, clampN: clampN,
     createRun: createRun,
     guardRemaining: guardRemaining, noiseRemaining: noiseRemaining,
-    probesRemaining: probesRemaining, isEnded: isEnded,
+    isEnded: isEnded,
     setK: setK, setN: setN,
-    listen: listen, probe: probe, tryCombination: tryCombination,
+    listen: listen, tryCombination: tryCombination,
   });
 });

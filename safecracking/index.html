@@ -82,6 +82,12 @@
   .guide-ring { fill: none; stroke: var(--line-hi); stroke-width: 1.5; stroke-dasharray: 2 4; }
   .mystery-ring { fill: none; stroke: var(--line-hi); stroke-width: 2.5; }
   .mystery-mark { font-size: 40px; fill: var(--accent); font-weight: 700; font-family: inherit; }
+  svg.necklace.dial { width: 120px; height: 120px; margin-bottom: 4px; }
+  svg.necklace.dial .step-dot.onset { fill: var(--probe); stroke: #2c5f86; }
+  svg.necklace.dial .step-dot.onset.downbeat { fill: #cfe6ff; stroke: var(--probe); }
+  .step-dot.flash, .mystery-ring.flash { stroke: var(--accent-hi) !important; stroke-width: 5; transition: none; }
+  #dialHint { font-size: 12px; color: var(--ink-dim); line-height: 1.5; margin: 0 0 10px; }
+  #dialHint b { color: var(--ink); }
   #lockHint { color: var(--ink-dim); font-size: 12px; min-height: 1em; margin-bottom: 8px; }
   #lockReveal {
     display: none; font-family: var(--mono); font-size: 14px; color: var(--accent);
@@ -138,9 +144,6 @@
   }
   .h-line .cost { color: var(--ink-dim); white-space: nowrap; }
   .h-line .res { color: var(--ink); white-space: nowrap; }
-  .h-line .res.higher { color: var(--accent-hi); }
-  .h-line .res.lower { color: var(--probe); }
-  .h-line .res.equal { color: var(--ok-hi); }
   .h-line .res.win { color: var(--ok-hi); font-weight: 700; }
   .h-line .res.fail { color: var(--danger-hi); }
   #attempts { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); margin-top: 10px; line-height: 1.6; }
@@ -186,17 +189,13 @@
   <div class="status-row">
     <div class="stat" id="guardStat">
       <div class="label">Guard arrives in</div>
-      <div class="value"><span id="guardValue">20</span> beats</div>
+      <div class="value"><span id="guardValue"></span> beats</div>
       <div class="meter"><div id="guardFill" style="width:100%"></div></div>
     </div>
     <div class="stat" id="noiseStat">
       <div class="label">Noise</div>
-      <div class="value"><span id="noiseValue">0</span>/9</div>
+      <div class="value"><span id="noiseValue">0</span>/<span id="noiseMax"></span></div>
       <div class="meter"><div id="noiseFill" style="width:0%"></div></div>
-    </div>
-    <div class="stat">
-      <div class="label">Probes used</div>
-      <div class="value"><span id="probesValue">0</span>/3 <span id="calibHint" style="font-size:11px;color:var(--probe);font-family:var(--mono)"></span></div>
     </div>
   </div>
 
@@ -205,17 +204,18 @@
       <h2>The lock</h2>
       <div id="lockWrap">
         <svg class="necklace" id="lockSvg" aria-hidden="true"></svg>
-        <div id="lockHint">Locked. The rhythm is a mystery &mdash; listen to it.</div>
+        <div id="lockHint"></div>
         <div id="lockReveal"></div>
-        <button class="btn btn-row" id="listenBtn" style="width:100%;justify-content:center;">
-          <span class="kbd">L</span>&nbsp; Listen &mdash; play one full cycle
-          <span class="cost" style="font-family:var(--mono);font-size:11px;color:var(--ink-dim)">timer &minus;2 &middot; noise +1</span>
-        </button>
+        <button class="action-btn" id="listenBtn"></button>
       </div>
     </div>
 
     <div class="panel">
-      <h2>Tumblers</h2>
+      <h2>Your dial</h2>
+      <svg class="necklace dial" id="dialSvg" aria-hidden="true"></svg>
+      <p id="dialHint">Listen plays the lock (<b>thud</b>, left) against your dial (<b>metal tick</b>, right).
+        Right <b>n</b>: your tick lands on the thud every cycle. Tick drifting <b>behind</b>: n too high.
+        Creeping <b>ahead</b>: n too low. Right <b>k</b> too: every hit fuses.</p>
       <div class="stepper">
         <div class="lbl">Onsets <b>k</b> <span style="font-weight:400;color:var(--ink-dim)">(2&ndash;5)</span></div>
         <button id="kMinus" aria-label="decrease k">−</button>
@@ -229,14 +229,6 @@
         <button id="nPlus" aria-label="increase n">+</button>
       </div>
 
-      <button class="action-btn" id="probeKBtn">
-        <span><span class="kbd">K</span> Probe k</span>
-        <span class="cost">timer &minus;4 &middot; noise +2 &mdash; tells you higher / lower / equal</span>
-      </button>
-      <button class="action-btn" id="probeNBtn">
-        <span><span class="kbd">N</span> Probe n</span>
-        <span class="cost">timer &minus;4 &middot; noise +2 &mdash; tells you higher / lower / equal</span>
-      </button>
       <button class="action-btn primary" id="tryBtn">
         <span><span class="kbd">Enter</span> Try combination</span>
         <span class="cost">timer &minus;1 &middot; noise +3 &mdash; correct pair opens the lock</span>
@@ -252,14 +244,14 @@
     </div>
 
     <div class="panel">
-      <h2>Ran</h2>
+      <h2>Run</h2>
       <div class="btn-row">
         <button class="btn" id="restartBtn"><span class="kbd">R</span> Restart (same lock)</button>
         <button class="btn ghost" id="newLockBtn">&oplus; New lock</button>
       </div>
       <p style="font-size:12px;color:var(--ink-dim);line-height:1.5;margin-top:6px">
         Restart replays the exact same challenge from a clean slate. New lock draws a fresh seeded lock.
-        Adjusting k/n, hesitating, or playback time never advances the guard &mdash; only committed actions do.
+        Turning the dial, hesitating, or playback time never advances the guard &mdash; only committed actions do.
       </p>
     </div>
   </div>
@@ -269,18 +261,23 @@
     <ul>
       <li>The lock is keyed to a <b>Euclidean rhythm E(k, n)</b>: <b>k</b> onsets (hits) spread as evenly as possible across <b>n</b> steps, always starting with an accented downbeat on step 0.</li>
       <li>The secret is always <b>coprime</b> (gcd(k,n)=1), so the pattern never repeats inside its own cycle and there is exactly one right answer per sound.</li>
-      <li>Set <b>k</b> (2&ndash;5) and <b>n</b> (4&ndash;12) with the steppers or typing, then use the three actions. Changing inputs is free.</li>
-      <li><b>Listen</b>: hears one complete cycle at a fixed 100 BPM. Gives no numbers &mdash; the ear does the work. No audio, no charge. The first successful listen also <b>calibrates your pick</b> &mdash; probing is locked until you have heard the lock.</li>
-      <li><b>Probe k / Probe n</b>: compares the value on that axis to the secret and answers higher / lower / equal. Costs more time but less noise than a full try. You only get <b>3 probes</b> per lock.</li>
+      <li>Set your <b>dial</b> &mdash; <b>k</b> (2&ndash;5) and <b>n</b> (4&ndash;12) &mdash; with the steppers or typing. Turning the dial is free.</li>
+      <li><b>Listen</b>: plays the lock and your dial <b>together</b>, looping from a shared downbeat at a fixed 100 BPM. The listen is always the same length, whatever the lock. No numbers &mdash; the ear does the work. No audio, no charge.
+        <ul>
+          <li>Your metal tick <b>fuses</b> with the lock&rsquo;s thud every cycle: <b>n is right</b>.</li>
+          <li>Your tick falls <b>further behind</b> the thud each cycle: your n is <b>too high</b>. It creeps <b>ahead</b>: <b>too low</b>. The faster it drifts, the further off you are.</li>
+          <li><b>k</b>: count the lock&rsquo;s hits from one thud to the next &mdash; or set it and listen for every hit fusing.</li>
+        </ul>
+      </li>
       <li><b>Try combination</b>: a correct pair opens the lock even on the same beat the guard or noise cap would catch you. A wrong pair costs noise and only says &ldquo;still locked&rdquo;.</li>
       <li><b>Lose</b> if the guard&rsquo;s countdown hits 0 or noise hits the 9 cap. Lose only from committed actions &mdash; waiting, thinking, or fiddling with inputs is free.</li>
     </ul>
-    <p style="margin-bottom:2px">Every lock on this job comes from this known candidate pool:</p>
+    <p style="margin-bottom:2px">Every lock on this job is one of these:</p>
     <div class="pool-chips" id="poolChips"></div>
   </details>
 
   <footer>
-    Keys: <span class="kbd">L</span> listen &middot; <span class="kbd">K</span> probe k &middot; <span class="kbd">N</span> probe n &middot; <span class="kbd">Enter</span> try &middot; <span class="kbd">R</span> restart
+    Keys: <span class="kbd">L</span> listen &middot; <span class="kbd">&larr;&rarr;</span> dial n &middot; <span class="kbd">&uarr;&darr;</span> dial k &middot; <span class="kbd">Enter</span> try &middot; <span class="kbd">R</span> restart
   </footer>
 
 </div>
@@ -300,19 +297,16 @@
   let run = null;
 
   // ---------------------------------------------------------------------
-  // Audio — Tone.js playback of one full secret cycle on the audio clock.
-  // Tempo is FIXED for the whole challenge (no slider), so cycle lengths
-  // stay comparable between listens.
+  // Audio — Tone.js playback of R.listenSchedule on the audio clock: the lock
+  // (thud + click, panned left) against the player's dial (metal tick + soft
+  // tick, panned right). Tempo is FIXED so drift is comparable between listens.
   // ---------------------------------------------------------------------
   const audio = {
     ready: false,
     ok: true,
     playing: false,
-    seq: null,
     killTimer: null,
-    pulseTimer: null,
     synths: null,
-    doms: null,
   };
 
   async function initAudio() {
@@ -321,10 +315,16 @@
     try {
       if (typeof Tone === 'undefined') throw new Error('Tone.js did not load');
       await Tone.start();
-      const kick = new Tone.MembraneSynth({ pitchDecay: 0.02, octaves: 4, envelope: { attack: 0.001, decay: 0.35, sustain: 0 } }).toDestination();
-      const click = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 } }).toDestination();
+      const left = new Tone.Panner(-0.45).toDestination();
+      const right = new Tone.Panner(0.45).toDestination();
+      const kick = new Tone.MembraneSynth({ pitchDecay: 0.02, octaves: 4, envelope: { attack: 0.001, decay: 0.35, sustain: 0 } }).connect(left);
+      const click = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 } }).connect(left);
       click.volume.value = -6;
-      audio.synths = { kick, click };
+      const metal = new Tone.MetalSynth({ envelope: { attack: 0.001, decay: 0.12, release: 0.02 }, harmonicity: 5.1, modulationIndex: 24, resonance: 4200, octaves: 1.2 }).connect(right);
+      metal.volume.value = -10;
+      const tick = new Tone.Synth({ oscillator: { type: 'square' }, envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.02 } }).connect(right);
+      tick.volume.value = -24;
+      audio.synths = { kick, click, metal, tick };
       audio.ok = true;
     } catch (err) {
       console.warn('[SafeCracker] audio init failed:', err);
@@ -334,62 +334,49 @@
   }
 
   function stopPlayback() {
-    if (audio.seq) { try { audio.seq.stop(0); } catch (e) { /* ignore */ } try { audio.seq.dispose(); } catch (e) { /* ignore */ } audio.seq = null; }
     if (audio.killTimer) { clearTimeout(audio.killTimer); audio.killTimer = null; }
-    if (audio.pulseTimer) { clearTimeout(audio.pulseTimer); audio.pulseTimer = null; }
     try { Tone.Transport.cancel(); Tone.Transport.stop(); } catch (e) { /* ignore */ }
+    const wasPlaying = audio.playing;
     audio.playing = false;
-    clearLockPulse();
-    renderLock();
+    document.querySelectorAll('.flash').forEach((el) => el.classList.remove('flash'));
+    if (wasPlaying) renderAll();
   }
 
-  // One subtle pulse when playback starts and one when it ends — a cycle
-  // marker only. Deliberately NOT one pulse per onset: counting pulses would
-  // reveal the secret onset count before the run is over.
-  function pulseLock() {
-    const ring = document.querySelector('#lockSvg .mystery-ring');
-    if (!ring) return;
-    ring.style.transition = 'stroke 0.1s ease';
-    ring.style.stroke = 'var(--accent)';
-    if (audio.pulseTimer) clearTimeout(audio.pulseTimer);
-    audio.pulseTimer = setTimeout(() => { ring.style.stroke = 'var(--line-hi)'; audio.pulseTimer = null; }, 220);
-  }
-  function clearLockPulse() {
-    if (audio.pulseTimer) { clearTimeout(audio.pulseTimer); audio.pulseTimer = null; }
-    const ring = document.querySelector('#lockSvg .mystery-ring');
-    if (ring) ring.style.stroke = 'var(--line-hi)';
+  // Flash the lock ring on each lock downbeat and the dial's step-0 dot on each
+  // dial downbeat — the same drift the ear hears, never the lock's other hits
+  // (flashing those would hand over k for free).
+  function flash(selector) {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 110);
   }
 
-  /* Schedule one full cycle of the secret and stop cleanly. Resolves true iff
-   * playback was actually scheduled (i.e. the player heard the cycle). */
-  async function playSecretCycle(pattern) {
+  const PLAY = {
+    lockDownbeat: (t) => { audio.synths.kick.triggerAttackRelease('C2', '8n', t); Tone.Draw.schedule(() => flash('#lockSvg .mystery-ring'), t); },
+    lockOnset: (t) => audio.synths.click.triggerAttackRelease('E5', '16n', t, 0.7),
+    dialDownbeat: (t) => { audio.synths.metal.triggerAttackRelease('C4', '32n', t, 0.8); Tone.Draw.schedule(() => flash('#dialSvg .step-dot.downbeat'), t); },
+    dialOnset: (t) => audio.synths.tick.triggerAttackRelease('B6', '32n', t, 0.5),
+  };
+
+  /* Schedule one full listen — the lock against the dial for R.LISTEN_STEPS
+   * steps — and stop cleanly after the last step has fully elapsed. Resolves
+   * true iff playback was actually scheduled (i.e. the player heard it). */
+  async function playListen(secret, dial) {
     if (audio.playing) return false;
     const okInit = await initAudio();
     if (!okInit) return false;
     stopPlayback();
-    Tone.Transport.bpm.value = R.TEMPO_BPM;
-    const stepDur = 60 / Tone.Transport.bpm.value / 4; // '16n' at BPM
-    const cycleMs = pattern.length * stepDur * 1000;
-    const indices = pattern.map((_, i) => i);
-
+    const stepDur = 60 / R.TEMPO_BPM / 4; // 16th notes
+    for (const ev of R.listenSchedule(secret, dial)) {
+      Tone.Transport.schedule((time) => PLAY[ev.voice](time), ev.step * stepDur);
+    }
+    Tone.Transport.schedule((time) => Tone.Draw.schedule(stopPlayback, time), R.LISTEN_STEPS * stepDur);
     audio.playing = true;
-    audio.seq = new Tone.Sequence((time, i) => {
-      const onset = pattern[i] === 1;
-      if (onset) {
-        if (i === 0) audio.synths.kick.triggerAttackRelease('C2', '8n', time);
-        else audio.synths.click.triggerAttackRelease('E5', '16n', time, 0.7);
-      }
-      if (i === pattern.length - 1) {
-        Tone.Draw.schedule(() => stopPlayback(), time);
-      }
-    }, indices, '16n');
-    audio.seq.loop = false;
-    audio.seq.start(0);
-    Tone.Transport.start();
-    pulseLock();
+    Tone.Transport.start('+0.05');
     // Fallback cleanup: never let scheduled audio outlive a broken stop.
-    audio.killTimer = setTimeout(stopPlayback, cycleMs + 400);
-    renderLock();
+    audio.killTimer = setTimeout(stopPlayback, R.LISTEN_STEPS * stepDur * 1000 + 600);
+    renderAll();
     return true;
   }
 
@@ -439,18 +426,19 @@
   // ---------------------------------------------------------------------
   // Input steppers (changing input is free — never charges or advances)
   // ---------------------------------------------------------------------
-  function setK(v) { if (run) R.setK(run, v); syncInputs(); }
-  function setN(v) { if (run) R.setN(run, v); syncInputs(); }
+  function setK(v) { if (run && !audio.playing) R.setK(run, v); renderAll(); }
+  function setN(v) { if (run && !audio.playing) R.setN(run, v); renderAll(); }
   function syncInputs() {
     if (!run) return;
     $('kInput').value = run.k;
     $('nInput').value = run.n;
+    renderNecklace($('dialSvg'), R.bjorklund(run.k, run.n), false);
   }
 
   // ---------------------------------------------------------------------
   // History / attempts
   // ---------------------------------------------------------------------
-  const RES_TEXT = { higher: '\u25B2 higher', lower: '\u25BC lower', equal: '\u2713 equal', win: 'OPENED', fail: 'still locked' };
+  const RES_TEXT = { win: 'OPENED', fail: 'still locked' };
 
   function renderHistory() {
     const list = $('historyList');
@@ -459,9 +447,8 @@
       const row = document.createElement('div');
       row.className = 'h-line';
       let res = '';
-      if (h.type === 'probe') res = `<span class="res ${h.result}">${h.label}=${h.value} &rarr; ${RES_TEXT[h.result]}</span>`;
-      else if (h.type === 'try') res = `<span class="res ${h.result}">(${h.k}, ${h.n}) &rarr; ${RES_TEXT[h.result]}</span>`;
-      else res = `<span class="res">${h.detail}</span>`;
+      if (h.type === 'try') res = `<span class="res ${h.result}">(${h.k}, ${h.n}) &rarr; ${RES_TEXT[h.result]}</span>`;
+      else res = `<span class="res">against dial (${h.k}, ${h.n})</span>`;
       row.innerHTML = `<span>${h.label}</span><span class="cost">timer &minus;${h.beats} &middot; noise +${h.noise}</span>${res}`;
       list.appendChild(row);
     });
@@ -510,11 +497,10 @@
     // Status resources
     $('guardValue').textContent = R.guardRemaining(run);
     $('noiseValue').textContent = run.noise;
-    $('probesValue').textContent = run.probesUsed;
-    $('calibHint').textContent = run.listenedCount > 0 ? '' : '\u2190 listen to calibrate';
+    $('noiseMax').textContent = R.NOISE_LIMIT;
     $('guardFill').style.width = Math.max(0, Math.min(100, (R.guardRemaining(run) / R.GUARD_BEATS) * 100)) + '%';
     $('noiseFill').style.width = Math.min(100, (run.noise / R.NOISE_LIMIT) * 100) + '%';
-    $('guardStat').classList.toggle('warn', R.guardRemaining(run) <= 4);
+    $('guardStat').classList.toggle('warn', R.guardRemaining(run) <= 2 * R.COSTS.listen.beats);
     $('noiseStat').classList.toggle('warn', run.noise >= R.NOISE_LIMIT - 3);
     $('banner').classList.toggle('show', ended);
 
@@ -522,24 +508,21 @@
     renderLock();
     $('lockReveal').classList.toggle('on', ended);
 
-    // Action availability
-    $('listenBtn').disabled = ended || audio.playing;
-    const calibrated = run.listenedCount > 0;
-    $('probeKBtn').disabled = ended || run.probesUsed >= R.MAX_PROBES || !calibrated;
-    $('probeNBtn').disabled = ended || run.probesUsed >= R.MAX_PROBES || !calibrated;
+    // Action availability — the dial is frozen while a listen plays, so what
+    // you hear is always against the dial shown.
+    const frozen = ended || audio.playing;
+    $('listenBtn').disabled = frozen;
     $('tryBtn').disabled = ended;
-    $('kMinus').disabled = ended; $('kPlus').disabled = ended;
-    $('nMinus').disabled = ended; $('nPlus').disabled = ended;
-    $('kInput').disabled = ended; $('nInput').disabled = ended;
+    $('kMinus').disabled = frozen; $('kPlus').disabled = frozen;
+    $('nMinus').disabled = frozen; $('nPlus').disabled = frozen;
+    $('kInput').disabled = frozen; $('nInput').disabled = frozen;
+    syncInputs();
 
+    const cost = (c) => 'timer &minus;' + c.beats + ' &middot; noise +' + c.noise;
     $('listenBtn').innerHTML = audio.playing
-      ? '<span><span class="kbd">L</span> Playing&hellip;</span><span class="cost" style="font-family:var(--mono);font-size:11px;color:var(--ink-dim)">timer &minus;2 &middot; noise +1</span>'
-      : '<span><span class="kbd">L</span> Listen &mdash; play one full cycle</span><span class="cost" style="font-family:var(--mono);font-size:11px;color:var(--ink-dim)">timer &minus;2 &middot; noise +1</span>';
-
-    // Probe / try buttons reflect current entered values
-    $('probeKBtn').innerHTML = '<span><span class="kbd">K</span> Probe k=' + run.k + '</span><span class="cost">timer &minus;4 &middot; noise +2 &mdash; higher / lower / equal</span>';
-    $('probeNBtn').innerHTML = '<span><span class="kbd">N</span> Probe n=' + run.n + '</span><span class="cost">timer &minus;4 &middot; noise +2 &mdash; higher / lower / equal</span>';
-    $('tryBtn').innerHTML = '<span><span class="kbd">Enter</span> Try (' + run.k + ', ' + run.n + ')</span><span class="cost">timer &minus;1 &middot; noise +3 &mdash; correct pair opens the lock</span>';
+      ? '<span><span class="kbd">L</span> Listening against dial (' + run.k + ', ' + run.n + ')&hellip;</span><span class="cost">' + cost(R.COSTS.listen) + '</span>'
+      : '<span><span class="kbd">L</span> Listen &mdash; lock vs. your dial (' + run.k + ', ' + run.n + ')</span><span class="cost">' + cost(R.COSTS.listen) + ' &mdash; quiet, but slow</span>';
+    $('tryBtn').innerHTML = '<span><span class="kbd">Enter</span> Try (' + run.k + ', ' + run.n + ')</span><span class="cost">' + cost(R.COSTS.try) + ' &mdash; correct pair opens the lock</span>';
 
     renderHistory();
   }
@@ -549,7 +532,7 @@
     const showsMystery = !R.isEnded(run);
     renderNecklace($('lockSvg'), run.pattern, showsMystery);
     $('lockHint').textContent = showsMystery
-      ? 'Locked. The rhythm is a mystery &mdash; listen to it.'
+      ? 'Locked. The rhythm is a mystery \u2014 listen for the contact point.'
       : (run.won ? 'The lock clicks open. The rhythm it was keyed to:' : 'Too late. The rhythm it was keyed to:');
   }
 
@@ -558,25 +541,12 @@
   // ---------------------------------------------------------------------
   async function doListen() {
     if (!run || R.isEnded(run) || audio.playing) return;
-    const heard = await playSecretCycle(run.pattern);
+    const heard = await playListen(run.secret, { k: run.k, n: run.n });
     const res = R.listen(run, { heard: heard });
     if (!res.ok) {
       if (res.reason === 'audio_unavailable') {
         showToast("Audio couldn't start — nothing was charged. Check your browser's audio permissions and try again.");
       }
-      return;
-    }
-    renderAll();
-    if (res.lost) onEnded();
-  }
-
-  function doProbe(axis) {
-    if (!run || R.isEnded(run)) return;
-    stopPlayback();
-    const res = R.probe(run, axis);
-    if (!res.ok) {
-      if (res.reason === 'probe_limit') showToast('No probes left — that one cost you nothing.');
-      else if (res.reason === 'need_listen') showToast('Your pick isn\u2019t calibrated yet — listen to the lock first.');
       return;
     }
     renderAll();
@@ -632,15 +602,15 @@
     }
     const k = e.key.toLowerCase();
     if (k === 'l') { e.preventDefault(); doListen(); }
-    else if (k === 'k') { e.preventDefault(); doProbe('k'); }
-    else if (k === 'n') { e.preventDefault(); doProbe('n'); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); setN(run.n - 1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); setN(run.n + 1); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setK(run.k - 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setK(run.k + 1); }
     else if (e.key === 'Enter') { e.preventDefault(); doTry(); }
     else if (k === 'r') { e.preventDefault(); restart(); }
   });
 
   $('listenBtn').addEventListener('click', doListen);
-  $('probeKBtn').addEventListener('click', () => doProbe('k'));
-  $('probeNBtn').addEventListener('click', () => doProbe('n'));
   $('tryBtn').addEventListener('click', doTry);
   $('restartBtn').addEventListener('click', restart);
   $('newLockBtn').addEventListener('click', newLock);
@@ -668,6 +638,7 @@
     audio.ready = true;
     audio.ok = false;
   }
+  $('noiseMax').textContent = R.NOISE_LIMIT;
   run = R.createRun(R.randomSeed());
   renderAll();
 })();
