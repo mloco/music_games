@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Genome — evolution sanity check</title>
 <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+<script src="challenge-core.js"></script>
 <style>
   :root {
     color-scheme: light dark;
@@ -96,6 +97,24 @@
   .creature { text-align: center; }
   .creature canvas { display: block; margin: 0 auto; }
   .creature .cap { font-size: 0.62rem; color: var(--muted); margin-top: 0.15rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+  .ch-creature {
+    text-align: center;
+    padding: 0.35rem 0.25rem;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .ch-creature:hover { border-color: var(--panel-border); background: rgba(255,255,255,0.02); }
+  .ch-creature canvas { display: block; margin: 0 auto; }
+  .ch-creature .cap { font-size: 0.66rem; font-weight: 600; margin-top: 0.15rem; font-variant-numeric: tabular-nums; line-height: 1.3; }
+  .ch-creature .sub { font-size: 0.6rem; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.35; }
+  .ch-creature.parentA { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .ch-creature.parentB { outline: 2px solid #2dd4bf; outline-offset: 1px; }
+  .ch-creature.won { outline: 2px solid var(--fertile); background: rgba(79,214,122,0.08); }
+  .ch-banner-win { background: rgba(79,214,122,0.14); color: var(--fertile); border: 1px solid var(--fertile); }
+  .ch-banner-lost { background: rgba(255,107,91,0.12); color: var(--infertile); border: 1px solid var(--infertile); }
+  .ch-banner-info { background: rgba(255,210,63,0.08); color: var(--accent); border: 1px solid var(--accent-dim); }
   .legend { display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.78rem; color: var(--muted); margin-top: 0.8rem; }
   .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 0.35rem; vertical-align: middle; }
   .charts-row { display: flex; gap: 1rem; flex-wrap: wrap; }
@@ -109,15 +128,18 @@
   <header>
     <h1>Genome</h1>
     <p>
-      A minimal evolutionary sanity check. A population of rhythm-creatures — each just the
-      tuple <code>(k, n, phase)</code> of a Euclidean rhythm — gets scored by how well it lines up
-      with the world's own rhythm, then the fittest breed with crossover and mutation. Watch the
-      population's genomes and sound converge on the world's groove over generations. No energy
-      economy, no death, no player yet — selection here is automatic.
+      An evolutionary rhythm instrument plus a player-directed breeding challenge. In <b>Instrument</b>
+      mode the population breeds automatically and its sound converges on the world's groove. In
+      <b>Challenge</b> mode <i>you</i> are the selector: audition creatures and breed the two you think
+      will lock onto the food rhythm E(5,16) within the generation budget.
     </p>
+    <div class="buttons" style="margin-top:0.85rem;">
+      <button id="modeInstrument" class="primary">Instrument</button>
+      <button id="modeChallenge">Challenge</button>
+    </div>
   </header>
 
-  <div class="row">
+  <section id="instrumentMode">
     <div class="panel" style="flex: 1 1 380px;">
       <h2>World (the selection pressure)</h2>
       <div class="world-necklace-wrap">
@@ -355,6 +377,71 @@
       <div class="legend"><div><span class="swatch" style="background:#ffd23f"></span>A best <span class="swatch" style="background:#8a8256"></span>A avg <span class="swatch" style="background:#2dd4bf"></span>B best <span class="swatch" style="background:#3f8a80"></span>B avg</div></div>
     </div>
   </div>
+
+  </section>
+
+  <section id="challengeMode" style="display:none;">
+    <div class="row">
+      <div class="panel" style="flex: 1 1 300px;">
+        <h2>World — the food rhythm</h2>
+        <div class="world-necklace-wrap">
+          <canvas id="chWorldCanvas" width="160" height="160"></canvas>
+          <div>
+            <div class="necklace-caption" id="chWorldLabel"></div>
+            <p style="font-size:0.8rem; color:var(--muted); max-width:24ch; line-height:1.4; margin:0.4rem 0 0;">
+              Food appears on these 5 steps of every 16-beat cycle. A creature that plays exactly on
+              these steps and nowhere else is the goal.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="flex: 2 1 420px;">
+        <h2>Challenge</h2>
+        <div class="buttons">
+          <button id="chListen" class="primary">▶ Audition selection</button>
+          <button id="chBreed">Breed next generation</button>
+          <button id="chRestart">Restart</button>
+        </div>
+        <div class="stat-line">
+          <span>Generation <b id="chGen">1</b> / <span id="chBudget">12</span></span>
+          <span>Best match <b id="chBest">–</b></span>
+          <span>Parents <b id="chParents">none</b></span>
+        </div>
+        <div id="chBannerWrap" style="display:none; margin:0.5rem 0 0.7rem; padding:0.6rem 0.85rem; border-radius:8px; font-size:0.9rem; font-weight:600;">
+          <span id="chBannerText"></span>
+        </div>
+        <div id="chFeed" class="necklace-caption" style="line-height:1.5;"></div>
+        <div class="controls-grid" style="margin-top:0.7rem; grid-template-columns:1fr;">
+          <div class="ctl">
+            <label>Tempo (BPM) <span id="chTempoVal">110</span></label>
+            <input type="range" id="chTempo" min="60" max="180" value="110">
+          </div>
+        </div>
+        <p style="font-size:0.78rem; color:var(--muted); margin:0.6rem 0 0; max-width:56ch; line-height:1.45;">
+          <b>How to play:</b> click a creature (or press its number key) to make it a parent — the first
+          becomes parent&nbsp;A, the second parent&nbsp;B; clicking selects a fresh pair. Hit
+          <b>Audition selection</b> to hear your two parents against the food rhythm, then
+          <b>Breed next generation</b>: your two parents' genes are crossed over and slightly mutated into
+          two children, which replace the two <i>weakest</i> creatures (your parents are never discarded).
+          Score = how closely the creature's pattern matches the food rhythm over a full shared cycle:
+          <b>food hits</b> counted, <b>missed food</b> and <b>activity without food</b> both penalized.
+          Breed deliberately — you have only a set number of generations.
+        </p>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:1rem;">
+      <h2>Population — pick your parents</h2>
+      <div class="pop-grid" id="chPopGrid"></div>
+      <div class="legend">
+        <div><span class="swatch" style="border:2px solid var(--accent); background:transparent;"></span>parent A</div>
+        <div><span class="swatch" style="border:2px solid #2dd4bf; background:transparent;"></span>parent B</div>
+        <div><span class="swatch" style="background:var(--dot-empty);"></span>dull = poor match → <span class="swatch" style="background:var(--fertile);"></span>bright = close match</div>
+        <div>below each creature: genome (k, n, phase) · match % · food hits / missed food / idle activity</div>
+      </div>
+    </div>
+  </section>
 
 </div>
 
@@ -1324,12 +1411,287 @@ bindVoiceVelocity("PopA", "popA");
 bindVoiceVelocity("PopB", "popB");
 bindVoiceVelocity("Metro", "metro");
 
+/* ---------------------------- Challenge mode --------------------------------
+   Player-directed breeding challenge. All logic (scoring, crossover, mutation,
+   replacement, win/loss) lives in challenge-core.js and is unit-tested in Node;
+   this section is just the UI shell around it. The challenge uses its own fixed
+   world rhythm (E(5,16) rot 0) and its own population, independent of the
+   instrument above, and its own audition voices so switching modes never touches
+   the instrument's mixer.
+   ---------------------------------------------------------------------- */
+
+const chEls = {
+  worldCanvas: document.getElementById("chWorldCanvas"),
+  worldLabel: document.getElementById("chWorldLabel"),
+  popGrid: document.getElementById("chPopGrid"),
+  listen: document.getElementById("chListen"),
+  breed: document.getElementById("chBreed"),
+  restart: document.getElementById("chRestart"),
+  gen: document.getElementById("chGen"),
+  budget: document.getElementById("chBudget"),
+  best: document.getElementById("chBest"),
+  parents: document.getElementById("chParents"),
+  bannerWrap: document.getElementById("chBannerWrap"),
+  bannerText: document.getElementById("chBannerText"),
+  feed: document.getElementById("chFeed"),
+  tempo: document.getElementById("chTempo"),
+  tempoVal: document.getElementById("chTempoVal"),
+};
+
+const challenge = GenomeChallenge.createChallenge();
+const chState = challenge.state;
+let chStep = 0;                 // audition step counter (0..15 within the world cycle)
+let chLoopId = null;            // Tone.Transport repeat id for audition
+let chAudWorld = null, chAudVolWorld = null, chAudA = null, chAudVolA = null, chAudB = null, chAudVolB = null;
+let chWorldHighlight = -1;
+let chCreCards = [];            // {div, canvas, capGenome, capSub}
+let chCardHighlights = {};      // population index -> active step index during audition
+
+function chInitAudAudio() {
+  if (chAudWorld) return;
+  chAudVolWorld = new Tone.Volume(-5).toDestination();
+  chAudVolA = new Tone.Volume(-8).toDestination();
+  chAudVolB = new Tone.Volume(-8).toDestination();
+  chAudWorld = new Tone.MembraneSynth({
+    pitchDecay: 0.01, octaves: 3,
+    envelope: { attack: 0.001, decay: 0.28, sustain: 0 },
+  }).connect(chAudVolWorld);
+  chAudA = new Tone.MembraneSynth({
+    pitchDecay: 0.035, octaves: 5,
+    envelope: { attack: 0.001, decay: 0.16, sustain: 0 },
+  }).connect(chAudVolA);
+  chAudB = new Tone.MembraneSynth({
+    pitchDecay: 0.012, octaves: 2.5,
+    envelope: { attack: 0.001, decay: 0.1, sustain: 0 },
+  }).connect(chAudVolB);
+}
+
+function chTempoApply() { if (audioReady || chAudWorld) Tone.Transport.bpm.value = parseInt(chEls.tempo.value, 10) || 110; }
+
+function chAudioTick(time) {
+  const w = chState.world;
+  const wOn = w.pattern[chStep % w.N];
+  const tA = time; // no swing in challenge — straight audition
+  if (wOn && chAudWorld) chAudWorld.triggerAttackRelease("C2", "16n", tA, 0.9);
+  const parents = chState.parents;
+  if (parents.length >= 1 && chAudA) {
+    const a = chState.population[parents[0]];
+    if (a.pattern[chStep % a.n]) chAudA.triggerAttackRelease("G3", "32n", tA, 0.7);
+  }
+  if (parents.length >= 2 && chAudB) {
+    const b = chState.population[parents[1]];
+    if (b.pattern[chStep % b.n]) chAudB.triggerAttackRelease("C5", "32n", tA, 0.7);
+  }
+  const frozen = chStep;
+  Tone.Draw.schedule(() => {
+    chWorldHighlight = frozen % w.N;
+    chCardHighlights = {};
+    chState.parents.forEach(slot => {
+      const c = chState.population[slot];
+      chCardHighlights[slot] = frozen % c.n;
+    });
+    chRenderWorld();
+    chRenderPopulation();
+  }, tA);
+  chStep = (chStep + 1) % w.N;
+}
+
+function chStartAudition() {
+  chInitAudAudio();
+  chTempoApply();
+  if (chLoopId !== null) { Tone.Transport.clear(chLoopId); chLoopId = null; }
+  chStep = 0;
+  Tone.start().then(() => {
+    chLoopId = Tone.Transport.scheduleRepeat(chAudioTick, "16n");
+    Tone.Transport.start();
+    chEls.listen.textContent = "■ Stop audition";
+  });
+}
+
+function chStopAudition() {
+  if (chLoopId !== null) { Tone.Transport.clear(chLoopId); chLoopId = null; }
+  chEls.listen.textContent = "▶ Audition selection";
+  Tone.Transport.stop();
+}
+
+function chRenderWorld() {
+  drawNecklace(chEls.worldCanvas, chState.world.N, chState.world.pattern, {
+    filled: "#ff6b5b", empty: getCss("--dot-empty"), highlight: chWorldHighlight,
+  });
+  chEls.worldLabel.textContent = `E(${chState.world.K},${chState.world.N}) rot ${chState.world.phase} · ` +
+    chState.world.pattern.join("");
+}
+
+function chRenderStatus() {
+  chEls.gen.textContent = chState.generation;
+  chEls.best.textContent = Math.round(chState.bestF1 * 100) + "%";
+  chEls.parents.textContent = chState.parents.length
+    ? chState.parents.map((i, slot) => {
+        const c = chState.population[i];
+        return `${slot === 0 ? "A" : "B"}: E(${c.k},${c.n},φ${c.phase}) ${Math.round(c.score.f1 * 100)}%`;
+      }).join("  ")
+    : "none selected";
+}
+
+function chRenderPopulation() {
+  if (chCreCards.length === 0) {
+    chEls.popGrid.innerHTML = "";
+    for (let i = 0; i < chState.population.length; i++) {
+      const div = document.createElement("div");
+      div.className = "ch-creature";
+      div.tabIndex = 0;
+      div.setAttribute("role", "button");
+      div.setAttribute("aria-label", `creature ${i}`);
+      div.innerHTML = `<canvas width="64" height="64"></canvas>` +
+        `<div class="cap" style="color:var(--accent);"></div>` +
+        `<div class="sub"></div>`;
+      div.addEventListener("click", () => { chToggleParent(i); });
+      div.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); chToggleParent(i); }
+      });
+      chEls.popGrid.appendChild(div);
+      chCreCards.push({ div, canvas: div.querySelector("canvas"), cap: div.querySelector(".cap"), sub: div.querySelector(".sub") });
+    }
+  }
+  const fits = chState.population.map(c => c.score.f1);
+  const min = Math.min(...fits), max = Math.max(...fits);
+  const span = (max - min) || 1;
+  const dull = "#3a3d47";
+  const winnerIdx = chState.population.findIndex(c => c.score.f1 === 1);
+  chState.population.forEach((c, i) => {
+    const card = chCreCards[i];
+    const t = (c.score.f1 - min) / span;
+    const color = lerpColor(t, dull, "#4fd67a");
+    drawNecklace(card.canvas, c.n, c.pattern, {
+      filled: color, empty: getCss("--dot-empty"),
+      highlight: chCardHighlights[i] !== undefined ? chCardHighlights[i] : -1,
+    });
+    card.cap.textContent = `E(${c.k},${c.n}) φ${c.phase}`;
+    const pct = Math.round(c.score.f1 * 100);
+    card.sub.textContent = `match ${pct}% · hits ${c.score.foodHits} · missed ${c.score.missed} · idle ${c.score.wasted}`;
+    card.div.classList.remove("parentA", "parentB", "won");
+    const pa = chState.parents.indexOf(i);
+    if (pa === 0) card.div.classList.add("parentA");
+    else if (pa === 1) card.div.classList.add("parentB");
+    if (i === winnerIdx) card.div.classList.add("won");
+  });
+}
+
+function chShowBanner(kind, text) {
+  chEls.bannerWrap.style.display = text ? "block" : "none";
+  chEls.bannerWrap.className = `ch-banner-${kind}`;
+  chEls.bannerText.textContent = text;
+}
+
+function chSetFeed(msg) {
+  chEls.feed.textContent = msg || "";
+}
+
+function chRenderAll() {
+  chRenderWorld();
+  chRenderPopulation();
+  chRenderStatus();
+}
+
+function chToggleParent(i) {
+  if (chState.status !== "playing") return;
+  challenge.toggleParent(i);
+  chSetFeed(`Parent ${chState.parents.length === 2 ? "set" : "selected"}: click another to finish the pair, or audition them.`);
+  chRenderAll();
+}
+
+function chBreed(ev) {
+  if (ev) ev.target.blur();
+  if (chState.status !== "playing") {
+    chSetFeed("This run is over — restart to try again.");
+    return;
+  }
+  const r = challenge.breed();
+  if (!r.ok) { chSetFeed(r.message || "Select two distinct parents first."); return; }
+  chStopAudition();
+  const lb = chState.lastBreed;
+  const childStr = lb.offspring.map(c => `E(${c.k},${c.n},φ${c.phase})`).join(" & ");
+  const repStr = lb.replaced.map(c => `E(${c.k},${c.n},φ${c.phase})`).join(" & ");
+  chSetFeed(`Gen ${chState.generation}: bred ${childStr}; replaced weakest (${repStr}). ` +
+    `Best match is now ${Math.round(chState.bestF1 * 100)}%.`);
+  if (chState.status === "won") {
+    chShowBanner("win", `Perfect match! A creature now plays exactly the food rhythm of E(${chState.world.K},${chState.world.N}) phase ${chState.world.phase}.`);
+  } else if (chState.status === "lost") {
+    chShowBanner("lost", "Budget exhausted — none of your creatures locked onto the food rhythm. Restart and try different parents.");
+  }
+  chRenderAll();
+}
+
+function chRestart() {
+  chStopAudition();
+  chStep = 0;
+  chWorldHighlight = -1;
+  chCardHighlights = {};
+  challenge.restart();
+  chShowBanner("", "");
+  chEls.best.textContent = "–";
+  chRenderAll();
+  chSetFeed("Fresh population seeded. Click two creatures (or press 1–8) to choose parents.");
+}
+
+function setMode(mode) {
+  const instrument = mode === "instrument";
+  document.getElementById("instrumentMode").style.display = instrument ? "" : "none";
+  document.getElementById("challengeMode").style.display = instrument ? "none" : "";
+  document.getElementById("modeInstrument").classList.toggle("primary", instrument);
+  document.getElementById("modeChallenge").classList.toggle("primary", !instrument);
+  // Stop whichever mode's audio is running so the two never bleed into each
+  // other: pause + unmount the instrument's transport loop entirely, and stop
+  // the challenge audition.
+  if (state.playing) setPlaying(false);
+  stopLoop();
+  if (loopId !== null) {
+    Tone.Transport.clear(loopId);
+    loopId = null;
+  }
+  chStopAudition();
+  if (!instrument) {
+    chSetFeed("Click two creatures (or press 1–8) to choose parents, audition them, then breed.");
+    chRenderAll();
+  }
+}
+document.getElementById("modeInstrument").addEventListener("click", () => setMode("instrument"));
+document.getElementById("modeChallenge").addEventListener("click", () => setMode("challenge"));
+
+chEls.listen.addEventListener("click", () => {
+  if (chLoopId !== null) { chStopAudition(); return; }
+  if (chState.parents.length === 0) { chSetFeed("Select at least one parent to audition against the food rhythm."); return; }
+  chStartAudition();
+});
+chEls.breed.addEventListener("click", chBreed);
+chEls.restart.addEventListener("click", chRestart);
+bindSlider("chTempo", "chTempoVal", v => { if (chAudWorld) Tone.Transport.bpm.value = v; }, v => v);
+
+document.addEventListener("keydown", (e) => {
+  if (document.getElementById("challengeMode").style.display === "none") return;
+  const t = (e.target && e.target.tagName) || "";
+  if (t === "INPUT" || t === "SELECT" || t === "TEXTAREA") return;
+  if (/^[1-8]$/.test(e.key)) {
+    const i = parseInt(e.key, 10) - 1;
+    if (i < chState.population.length) chToggleParent(i);
+  } else if (e.key === "l" || e.key === "L") {
+    chEls.listen.click();
+  } else if (e.key === "b" || e.key === "B" || e.key === "Enter") {
+    chBreed();
+  } else if (e.key === "r" || e.key === "R") {
+    chRestart();
+  }
+});
+
 /* ---------------------------- Init ------------------------------------------ */
 
 state.tempo = 110;
 document.getElementById("worldK").max = world.N - 1;
 document.getElementById("worldPhase").max = world.N - 1;
+chEls.budget.textContent = chState.budget;
 resetSimulation();
+chRenderAll();
+chSetFeed("Click two creatures (or press 1–8) to choose parents, audition them, then breed.");
 window.addEventListener("resize", () => { renderHistograms(); renderFitnessChart(); });
 
 </script>
